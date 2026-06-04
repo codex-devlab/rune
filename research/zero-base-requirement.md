@@ -51,9 +51,9 @@ Level 3 — Heavy User (기존 설계 대상)
 ### 시나리오 A: 완전 신규 (Level 0)
 
 ```bash
-pip install ctxman
+pip install rune
 cd my-new-project
-ctxman analyze .
+rune analyze .
 
 # 기존 설계 출력 (문제):
 ❌ Error: No CLAUDE.md found
@@ -61,14 +61,14 @@ ctxman analyze .
 ❌ Error: token_usage.jsonl not found
 
 # 개선 출력 (범용):
-📊 ctxman analyze — /Users/alice/my-new-project
+📊 rune analyze — /Users/alice/my-new-project
 
 현재 상태: Claude Code 설정 없음
 
 추천 액션:
-  1. ctxman init          → 권장 CLAUDE.md 구조 생성
-  2. ctxman scaffold      → 프로젝트 유형별 rules 템플릿 생성
-  3. ctxman watch         → 세션 모니터링 시작 (데이터 수집)
+  1. rune init          → 권장 CLAUDE.md 구조 생성
+  2. rune scaffold      → 프로젝트 유형별 rules 템플릿 생성
+  3. rune watch         → 세션 모니터링 시작 (데이터 수집)
 
 현재 최적화할 내용 없음 — 설정을 먼저 구성하세요.
 ```
@@ -76,7 +76,7 @@ ctxman analyze .
 ### 시나리오 B: 초기 사용자 (Level 1)
 
 ```bash
-ctxman analyze .
+rune analyze .
 
 # 출력:
 📊 Context Analysis — my-project
@@ -89,23 +89,23 @@ ctxman analyze .
 상태: 최적화 불필요 (설정이 작음)
 
 추천:
-  - 프로젝트가 성장하면 ctxman analyze로 재확인
-  - rules 추가 시 ctxman scaffold --rules로 트리거 구조 자동 설정
+  - 프로젝트가 성장하면 rune analyze로 재확인
+  - rules 추가 시 rune scaffold --rules로 트리거 구조 자동 설정
 ```
 
 ### 시나리오 C: 범용 (어떤 구조든)
 
 ```bash
 # Cursor 프로젝트
-ctxman analyze . --platform cursor
+rune analyze . --platform cursor
 → .cursorrules 파싱, cursor 설정 분석
 
 # 일반 마크다운 기반 에이전트
-ctxman analyze . --platform generic
+rune analyze . --platform generic
 → *.md 파일 전체 스캔, 주입 패턴 추론
 
 # 자동 감지
-ctxman analyze .
+rune analyze .
 → 플랫폼 자동 감지 (.claude/ → claude_code, .cursor/ → cursor, 없으면 generic)
 ```
 
@@ -131,7 +131,7 @@ rules = adapter.list_injection_sources(project)
 설정이 적어도 가치를 제공하고, 설정이 많아질수록 더 큰 가치를 제공한다.
 
 ```
-Level 0: "현재 설정 없음. ctxman init으로 시작하세요." (가이드 가치)
+Level 0: "현재 설정 없음. rune init으로 시작하세요." (가이드 가치)
 Level 1: "설정이 적정합니다. 성장 추적 중." (모니터링 가치)
 Level 2: "중복 2건 발견, 트리거 최적화 가능." (분석 가치)
 Level 3: "47% 낭비 감지. 최적화 시 3,211 tokens 절감." (최적화 가치)
@@ -141,11 +141,11 @@ Level 3: "47% 낭비 감지. 최적화 시 3,211 tokens 절감." (최적화 가�
 
 ```bash
 # 설치 후 즉시 실행 가능
-pip install ctxman
-ctxman analyze .   # 어떤 디렉토리에서도 동작
+pip install rune
+rune analyze .   # 어떤 디렉토리에서도 동작
 ```
 
-추가 설정 파일(`~/.ctxman/config.yaml`) 없이도 동작. 설정은 선택사항.
+추가 설정 파일(`~/.rune/config.yaml`) 없이도 동작. 설정은 선택사항.
 
 ### 원칙 4: Platform Auto-Detection (자동 감지)
 
@@ -164,16 +164,16 @@ def detect_platform(path: Path) -> Platform:
 신규 사용자가 좋은 구조로 시작할 수 있도록 템플릿 제공.
 
 ```bash
-ctxman init
+rune init
 → CLAUDE.md 기본 구조 생성 (트리거 테이블 포함)
 → .claude/rules/ 디렉토리 생성
-→ "ctxman watch 실행해서 사용 패턴 수집 시작" 안내
+→ "rune watch 실행해서 사용 패턴 수집 시작" 안내
 
-ctxman scaffold --type python-backend
+rune scaffold --type python-backend
 → Python 백엔드 프로젝트 권장 rules 템플릿 생성
 → 트리거 키워드 사전 설정된 상태로 시작
 
-ctxman scaffold --type pmo-vault
+rune scaffold --type pmo-vault
 → PMO vault 스타일 rules 구조 생성
 ```
 
@@ -184,31 +184,31 @@ ctxman scaffold --type pmo-vault
 ### 기존 (heavy user 전용)
 
 ```
-ctxman analyze    ← 기존 설정 분석
-ctxman optimize   ← 최적화 적용
-ctxman profile    ← 프로파일 관리
-ctxman monitor    ← 모니터링
+rune analyze    ← 기존 설정 분석
+rune optimize   ← 최적화 적용
+rune profile    ← 프로파일 관리
+rune monitor    ← 모니터링
 ```
 
 ### 개선 (전체 스펙트럼 커버)
 
 ```
 # 신규 사용자 진입점
-ctxman init               → 권장 구조 생성 (zero → level 1)
-ctxman scaffold [--type]  → 프로젝트 유형별 rules 템플릿
+rune init               → 권장 구조 생성 (zero → level 1)
+rune scaffold [--type]  → 프로젝트 유형별 rules 템플릿
 
 # 모든 레벨 공통
-ctxman analyze [path]     → 현재 상태 분석 (Level 0도 오류 없이 동작)
-ctxman watch              → 세션 데이터 수집 시작
+rune analyze [path]     → 현재 상태 분석 (Level 0도 오류 없이 동작)
+rune watch              → 세션 데이터 수집 시작
 
 # Level 2+ 부터 의미있는 명령
-ctxman report             → 수집 데이터 기반 리포트
-ctxman optimize           → 최적화 제안 + 적용
+rune report             → 수집 데이터 기반 리포트
+rune optimize           → 최적화 제안 + 적용
 
 # Level 3 특화
-ctxman profile [create|apply|list]
-ctxman simulate
-ctxman verify
+rune profile [create|apply|list]
+rune simulate
+rune verify
 ```
 
 ---
@@ -218,23 +218,23 @@ ctxman verify
 ```
 신규 사용자 온보딩:
 
-Step 1: ctxman analyze .
-        → "Claude Code 설정 없음 감지. ctxman init 실행 추천"
+Step 1: rune analyze .
+        → "Claude Code 설정 없음 감지. rune init 실행 추천"
 
-Step 2: ctxman init
+Step 2: rune init
         → CLAUDE.md + rules/ 구조 생성
-        → "ctxman watch로 사용 패턴 수집 시작 추천"
+        → "rune watch로 사용 패턴 수집 시작 추천"
 
-Step 3: ctxman watch (백그라운드 실행)
+Step 3: rune watch (백그라운드 실행)
         → 세션마다 events.jsonl 수집
 
-Step 4 (2주 후): ctxman analyze .
+Step 4 (2주 후): rune analyze .
         → 실제 데이터 기반 "이 rules는 사용 안 됨, 이 부분 중복" 탐지
 
-Step 5: ctxman optimize --dry-run
+Step 5: rune optimize --dry-run
         → 변경 preview
 
-Step 6: ctxman optimize --apply
+Step 6: rune optimize --apply
         → 실제 적용
 ```
 
@@ -249,11 +249,11 @@ Day 1:    Adapter 인터페이스 + 플랫폼 자동 감지
 Day 2:    Graceful degradation — 빈 프로젝트 처리
 Day 3:    BASELINE (token_usage.jsonl 없으면 "데이터 없음" 안내)
 Day 4:    INVENTORY — 전체 소스 열거 (없으면 빈 결과)
-Day 5:    ctxman init / scaffold — 신규 사용자 진입점
+Day 5:    rune init / scaffold — 신규 사용자 진입점
 Day 6:    SCORE Tier 1+2
 Day 7-8:  TRIGGER 자동 추출
 Day 9:    DEDUP 신뢰도 기반
-Day 10:   SIMULATE + ctxman verify
+Day 10:   SIMULATE + rune verify
 Day 11:   events.jsonl 로깅
 Day 12:   CLI UX — Level별 다른 출력 포맷
 Day 13:   E2E 검증: Level 0 (빈 프로젝트) + Level 3 (pmo-vault)

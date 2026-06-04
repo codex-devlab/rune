@@ -88,7 +88,7 @@ Phase 3 (성능):  Rust 핵심 로직 포팅 (RTK처럼 단일 바이너리)
 **페르소나 A: Power User Dev (메인 타겟)**
 - Claude Code를 매일 사용하는 개발자
 - 이미 컨텍스트 압축을 경험하고 짜증을 느낌
-- `ctxman analyze` 실행 → "내 프로젝트에서 47% 낭비 중" → 즉시 가치 체감
+- `rune analyze` 실행 → "내 프로젝트에서 47% 낭비 중" → 즉시 가치 체감
 - RTK, context-mode를 이미 사용 중 → 이 계층은 인식하지만 도구가 없어서 손으로 관리
 
 **페르소나 B: Team/Org Admin**
@@ -106,8 +106,8 @@ Phase 3 (성능):  Rust 핵심 로직 포팅 (RTK처럼 단일 바이너리)
 
 ```bash
 # 이 경험이 첫 인상을 결정
-pip install ctxman
-ctxman analyze .
+pip install rune
+rune analyze .
 
 # 출력:
 📊 Context Analysis Report
@@ -123,7 +123,7 @@ ctxman analyze .
 
 예상 최적화 후: 4,201 tokens (-50.2%)
 
-실행: ctxman optimize --preview
+실행: rune optimize --preview
 ```
 
 **Product Roadmap:**
@@ -172,8 +172,8 @@ Day 9-10: Importance Scoring (간소화 버전)
           - chunk별 점수 → 최적화 후 예상 토큰 계산
 
 Day 11-12: CLI UX 완성
-          - ctxman analyze: 풀 리포트
-          - ctxman analyze --json: 파이프라인 통합용
+          - rune analyze: 풀 리포트
+          - rune analyze --json: 파이프라인 통합용
           - 컬러 출력, 진행 바
 
 Day 13-14: 테스트 + README + 첫 릴리즈
@@ -240,13 +240,13 @@ Week 3+: 피드백 수집 → v0.2 scope 확정
 
 | 이름 | 장점 | 단점 |
 |---|---|---|
-| **ctxman** | 직관적, CLI 친화적 | 평범함 |
+| **rune** | 직관적, CLI 친화적 | 평범함 |
 | **staticx** | STATIC 논문 브랜딩 | 발음 어색 |
 | **rulefold** | rule 압축 의미 명확 | 좁은 의미 |
 | **prism** | 분석·분리 의미, 멋짐 | 중복 가능성 |
 | **lumen** | 빛=명료화, 좋은 의미 | 기술과 거리 |
 
-→ **추천: `ctxman`** (MVP 단계), 성장 후 재브랜딩 옵션 열어둠
+→ **추천: `rune`** (MVP 단계), 성장 후 재브랜딩 옵션 열어둠
 
 ---
 

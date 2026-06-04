@@ -2,7 +2,7 @@
 
 > 작성일: 2026-06-03
 > 용도: 재소환 가능한 팀 구성 레퍼런스
-> 프로젝트: ctxman — Static Instruction Injection Optimizer
+> 프로젝트: rune — Static Instruction Injection Optimizer
 
 ---
 
@@ -59,8 +59,8 @@
 |---|---|
 | 문제명 | Static Instruction Injection Optimization Problem (SIOP) |
 | 포지셔닝 | RTK(tool output) · context-mode(tool output) 와 다른 레이어 — 정적 config 레이어 독점 |
-| Phase 1 범위 | `ctxman analyze` — 측정·시각화만 (optimize는 Phase 2) |
-| 제품명 | `ctxman` (MVP), 성장 후 재브랜딩 옵션 |
+| Phase 1 범위 | `rune analyze` — 측정·시각화만 (optimize는 Phase 2) |
+| 제품명 | `rune` (MVP), 성장 후 재브랜딩 옵션 |
 | 알고리즘 우선순위 | Token Accounting → Trigger Extraction → Cross-File Dedup → Importance Scoring → Profile Generation |
 | 구현 언어 | Python 3.11+ (Phase 1), Rust 포팅 (Phase 3) |
 | 수익 모델 | 완전 OSS로 시작, Stars 1k 후 Pro 검토 |

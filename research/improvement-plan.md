@@ -59,10 +59,10 @@ DEDUP_TIERS = {
     secrets-query.md:L45-52 ↔ infrastructure-update.md:L78-85
     [배타 키워드 표]
     → 제안: 공통 섹션으로 추출 후 양쪽에서 참조
-    → 실행: ctxman dedup --apply [--merge | --reference | --skip]
+    → 실행: rune dedup --apply [--merge | --reference | --skip]
 ```
 
-추가: **"문맥 보존 플래그"** — 같은 내용이라도 양쪽 파일이 서로 다른 목적으로 명시적 중복을 허용한 경우 `# ctxman:keep-duplicate` 주석으로 예외 처리
+추가: **"문맥 보존 플래그"** — 같은 내용이라도 양쪽 파일이 서로 다른 목적으로 명시적 중복을 허용한 경우 `# rune:keep-duplicate` 주석으로 예외 처리
 
 ---
 
@@ -104,7 +104,7 @@ class ContextAdapter(Protocol):
 
 ```bash
 # token_usage.jsonl 분석으로 실제 세션 토큰 구조 파악
-ctxman baseline --from ~/.claude/token_usage.jsonl --last 30d
+rune baseline --from ~/.claude/token_usage.jsonl --last 30d
 
 # 출력:
 📈 Baseline Analysis (최근 30일, 692 세션)
@@ -136,7 +136,7 @@ ctxman baseline --from ~/.claude/token_usage.jsonl --last 30d
 
 ```bash
 # 실제 적용 전 시뮬레이션
-ctxman optimize --simulate
+rune optimize --simulate
 
 # 출력:
 🔍 Optimization Simulation
@@ -153,7 +153,7 @@ Rule 로드 시나리오:
 안전 fallback 케이스: 2개 (로드 누락 위험 0)
 ```
 
-추가: **`ctxman verify`** — 트리거 인덱스 완성 후 테스트 발화 셋으로 로드 정확도 검증
+추가: **`rune verify`** — 트리거 인덱스 완성 후 테스트 발화 셋으로 로드 정확도 검증
 
 ---
 
@@ -168,7 +168,7 @@ Rule 로드 시나리오:
 
 ```python
 # Phase 1: 이벤트 로깅만 (로컬 저장)
-~/.ctxman/events.jsonl
+~/.rune/events.jsonl
 {
   "ts": 1748959200,
   "project": "pmo-vault",
@@ -234,7 +234,7 @@ Runtime: Trigger Table 주입 → On-demand Load
 
 ```
                     ┌─────────────────────────────────────┐
-                    │           ctxman pipeline            │
+                    │           rune pipeline            │
                     └─────────────────────────────────────┘
 
 Phase 0: BASELINE     token_usage.jsonl 분석 → 실측 낭비 정량화
@@ -245,7 +245,7 @@ Phase 2: SCORE        Tier 1/2/3 하이브리드 스코어링 (구조 + TF-IDF +
     │
 Phase 3: DEDUP        신뢰도 기반 3단계 (auto / suggest / ignore) + keep-duplicate 예외
     │
-Phase 4: TRIGGER      자동 추출 + Simulation Mode + ctxman verify 검증
+Phase 4: TRIGGER      자동 추출 + Simulation Mode + rune verify 검증
     │
 Phase 5: OPTIMIZE     dry-run → 사람 검토 → apply
     │
@@ -303,7 +303,7 @@ Day 14:   README + 데모 GIF + PyPI 배포
 | Dedup 안전성 | 병합 제안 | 신뢰도 3단계 + keep-duplicate 예외 | 문맥 보존 케이스 처리 |
 | 플랫폼 | Claude Code + Cursor | Claude Code + Generic adapter | Cursor는 Phase 2 |
 | 베이스라인 | johnlindquist 가정 | token_usage.jsonl 실측 (Day 2) | 자체 데이터 기반 |
-| Lazy Loading | 개념만 | Simulation Mode + ctxman verify | 안전성 확보 |
+| Lazy Loading | 개념만 | Simulation Mode + rune verify | 안전성 확보 |
 | 피드백 루프 | Phase 2 (미정) | Phase 1부터 events.jsonl 수집 | 데이터 준비 |
 | 주입 소스 | rules/*.md 중심 | commands/settings/memory 포함 | 완전한 인벤토리 |
 | 벤치마크 | "50% 절감" (미정의) | 3종 표준 벤치마크 + 3개 지표 | 재현 가능 측정 |

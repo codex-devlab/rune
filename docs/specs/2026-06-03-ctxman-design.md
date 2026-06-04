@@ -1,4 +1,4 @@
-# ctxman — 설계 스펙
+# rune — 설계 스펙
 
 > 작성일: 2026-06-03
 > 상태: 사용자 승인 완료
@@ -10,7 +10,7 @@
 
 ### 제품명
 
-`ctxman` (Context Instruction Manager)
+`rune` (Context Instruction Manager)
 
 ### 문제 정의 — SIOP
 
@@ -27,7 +27,7 @@
 ```
 RTK:           tool output 압축    (39k stars) ← 다른 레이어
 context-mode:  tool output 샌드박스 (16k stars) ← 다른 레이어
-ctxman:        static config 최적화             ← 공백 레이어 (SIOP)
+rune:        static config 최적화             ← 공백 레이어 (SIOP)
 ```
 
 ---
@@ -36,7 +36,7 @@ ctxman:        static config 최적화             ← 공백 레이어 (SIOP)
 
 모든 Level에서 오류 없이 동작하는 것이 핵심 불변 조건.
 
-| Level | 설명 | 보유 자산 | ctxman 가치 |
+| Level | 설명 | 보유 자산 | rune 가치 |
 |---|---|---|---|
 | 0 | 완전 신규 | 아무것도 없음 | 구조 생성 가이드 |
 | 1 | 초기 사용자 | CLAUDE.md 1개, rules 0~2개 | 현황 모니터링 |
@@ -88,15 +88,15 @@ def detect_platform(path: Path) -> Platform:
 ## 4. 컴포넌트 구조
 
 ```
-ctxman/
+rune/
 ├── cli/
 │   ├── main.py          ← typer 진입점
-│   ├── init.py          ← ctxman init (Level 0 진입점)
-│   ├── scaffold.py      ← ctxman scaffold [--type]
-│   ├── analyze.py       ← ctxman analyze [path]
-│   ├── watch.py         ← ctxman watch
-│   ├── report.py        ← ctxman report
-│   └── optimize.py      ← ctxman optimize [--dry-run|--apply]
+│   ├── init.py          ← rune init (Level 0 진입점)
+│   ├── scaffold.py      ← rune scaffold [--type]
+│   ├── analyze.py       ← rune analyze [path]
+│   ├── watch.py         ← rune watch
+│   ├── report.py        ← rune report
+│   └── optimize.py      ← rune optimize [--dry-run|--apply]
 │
 ├── adapters/
 │   ├── base.py          ← InjectionAdapter 추상 인터페이스
@@ -195,7 +195,7 @@ Stage 5: TRIGGER
 
 | Level | 실행 단계 | 출력 |
 |---|---|---|
-| 0 (빈 프로젝트) | 감지만 | "설정 없음. ctxman init 추천" |
+| 0 (빈 프로젝트) | 감지만 | "설정 없음. rune init 추천" |
 | 1 (최소 설정) | 1~2단계 | 현황 표시, "최적화 불필요" |
 | 2 (중간) | 1~4단계 | 중복 발견, 개선 기회 |
 | 3 (Heavy) | 전체 5단계 | 절감 예측, 트리거 인덱스 생성 |
@@ -207,8 +207,8 @@ Stage 5: TRIGGER
 ### 신규 사용자 진입점
 
 ```bash
-ctxman init               # 권장 구조 생성 (Level 0 → 1)
-ctxman scaffold [--type]  # 프로젝트 유형별 rules 템플릿
+rune init               # 권장 구조 생성 (Level 0 → 1)
+rune scaffold [--type]  # 프로젝트 유형별 rules 템플릿
   --type python-backend
   --type pmo-vault
   --type generic
@@ -217,46 +217,46 @@ ctxman scaffold [--type]  # 프로젝트 유형별 rules 템플릿
 ### 공통 (모든 Level)
 
 ```bash
-ctxman analyze [path]     # 현재 상태 분석 (Level 0도 오류 없음)
-ctxman watch              # 세션 데이터 수집 시작 → events.jsonl
+rune analyze [path]     # 현재 상태 분석 (Level 0도 오류 없음)
+rune watch              # 세션 데이터 수집 시작 → events.jsonl
 ```
 
 ### Level 2+ 부터 의미있는 명령
 
 ```bash
-ctxman report             # 수집 데이터 기반 리포트
-ctxman optimize --dry-run # 변경 preview
-ctxman optimize --apply   # 실제 적용
+rune report             # 수집 데이터 기반 리포트
+rune optimize --dry-run # 변경 preview
+rune optimize --apply   # 실제 적용
 ```
 
 ### Level 3 특화
 
 ```bash
-ctxman profile [create|apply|list]   # per-task 프로파일 관리
-ctxman simulate                      # Lazy Loading 시뮬레이션
-ctxman verify                        # 최적화 전후 성능 검증
+rune profile [create|apply|list]   # per-task 프로파일 관리
+rune simulate                      # Lazy Loading 시뮬레이션
+rune verify                        # 최적화 전후 성능 검증
 ```
 
 ### 신규 사용자 UX 흐름
 
 ```
-Step 1: ctxman analyze .
-        → "Claude Code 설정 없음 감지. ctxman init 실행 추천"
+Step 1: rune analyze .
+        → "Claude Code 설정 없음 감지. rune init 실행 추천"
 
-Step 2: ctxman init
+Step 2: rune init
         → CLAUDE.md + rules/ 구조 생성
-        → "ctxman watch로 사용 패턴 수집 시작 추천"
+        → "rune watch로 사용 패턴 수집 시작 추천"
 
-Step 3: ctxman watch (백그라운드 실행)
+Step 3: rune watch (백그라운드 실행)
         → 세션마다 events.jsonl 수집
 
-Step 4 (2주 후): ctxman analyze .
+Step 4 (2주 후): rune analyze .
         → 실제 데이터 기반 "이 rules는 사용 안 됨" 탐지
 
-Step 5: ctxman optimize --dry-run
+Step 5: rune optimize --dry-run
         → 변경 preview
 
-Step 6: ctxman optimize --apply
+Step 6: rune optimize --apply
         → 실제 적용
 ```
 
@@ -265,7 +265,7 @@ Step 6: ctxman optimize --apply
 ## 7. 데이터 흐름
 
 ```
-ctxman analyze .
+rune analyze .
         │
         ▼
 detect_platform()         → Platform.CLAUDE_CODE
@@ -309,7 +309,7 @@ sources = adapter.list_sources(path)  # → [] + "rules/ 없음" 메시지
 
 | 상황 | 처리 |
 |---|---|
-| 설정 파일 전혀 없음 | `[]` 반환, `ctxman init` 안내 |
+| 설정 파일 전혀 없음 | `[]` 반환, `rune init` 안내 |
 | `sentence-transformers` 미설치 | `--no-semantic` 자동 활성, TF-IDF fallback |
 | `tiktoken` 없음 | 문자 수 기반 추정 (±10% 오차 안내) |
 | 플랫폼 감지 실패 | `Platform.GENERIC` fallback |
@@ -379,11 +379,11 @@ Property Tests
 | 2 | Graceful degradation — 빈 프로젝트 처리 |
 | 3 | TOKENIZE (token_usage 없으면 "데이터 없음" 안내) |
 | 4 | INVENTORY — 전체 소스 열거 (없으면 빈 결과) |
-| 5 | `ctxman init` / `scaffold` — 신규 사용자 진입점 |
+| 5 | `rune init` / `scaffold` — 신규 사용자 진입점 |
 | 6 | SCORE Tier 1+2 |
 | 7~8 | TRIGGER 자동 추출 |
 | 9 | DEDUP 신뢰도 기반 |
-| 10 | SIMULATE + `ctxman verify` |
+| 10 | SIMULATE + `rune verify` |
 | 11 | events.jsonl 로깅 |
 | 12 | CLI UX — Level별 출력 포맷 |
 | 13 | E2E 검증: Benchmark-0 + Benchmark-2(pmo-vault) |
@@ -392,8 +392,8 @@ Property Tests
 ### Phase 2: 정확도 개선 (4~6주)
 
 - Perplexity 기반 Tier 3 스코어링 (claude-haiku API)
-- `ctxman optimize --dry-run / --apply`
-- `ctxman profile` (per-task 프로파일 관리)
+- `rune optimize --dry-run / --apply`
+- `rune profile` (per-task 프로파일 관리)
 - Web dashboard 초안
 
 ### Phase 3: 성능 + 확장 (3개월+)

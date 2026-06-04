@@ -1,8 +1,8 @@
-# ctxman Phase 1 CLI MVP — Implementation Plan
+# rune Phase 1 CLI MVP — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `ctxman analyze` CLI that measures static token injection waste across LLM agent config files, works on empty projects without crashing, and reports level-appropriate output.
+**Goal:** Build `rune analyze` CLI that measures static token injection waste across LLM agent config files, works on empty projects without crashing, and reports level-appropriate output.
 
 **Architecture:** Platform adapter detects project type (Claude Code/Cursor/Copilot/Generic), feeds 5-stage pipeline (Inventory→Tokenize→Score→Dedup→Trigger), outputs level-aware report. All adapters return `[]` on missing files — never raise.
 
@@ -16,15 +16,15 @@
 /Users/codex/Workspace/ToolSet/app/
 ├── pyproject.toml                       ← project metadata + dependencies
 ├── README.md                            ← user-facing docs
-├── ctxman/
+├── rune/
 │   ├── __init__.py
 │   ├── cli/
 │   │   ├── __init__.py
 │   │   ├── main.py                      ← typer app entry point
-│   │   ├── analyze.py                   ← ctxman analyze command
-│   │   ├── init_cmd.py                  ← ctxman init command
-│   │   ├── scaffold.py                  ← ctxman scaffold command
-│   │   └── watch.py                     ← ctxman watch command
+│   │   ├── analyze.py                   ← rune analyze command
+│   │   ├── init_cmd.py                  ← rune init command
+│   │   ├── scaffold.py                  ← rune scaffold command
+│   │   └── watch.py                     ← rune watch command
 │   ├── adapters/
 │   │   ├── __init__.py
 │   │   ├── base.py                      ← InjectionAdapter ABC + Platform enum
@@ -69,12 +69,12 @@
 
 **Files:**
 - Create: `pyproject.toml`
-- Create: `ctxman/__init__.py`
-- Create: `ctxman/cli/__init__.py`
-- Create: `ctxman/adapters/__init__.py`
-- Create: `ctxman/pipeline/__init__.py`
-- Create: `ctxman/models/__init__.py`
-- Create: `ctxman/scaffold/__init__.py`
+- Create: `rune/__init__.py`
+- Create: `rune/cli/__init__.py`
+- Create: `rune/adapters/__init__.py`
+- Create: `rune/pipeline/__init__.py`
+- Create: `rune/models/__init__.py`
+- Create: `rune/scaffold/__init__.py`
 - Create: `tests/conftest.py`
 
 - [ ] **Step 1: Create pyproject.toml**
@@ -85,7 +85,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
-name = "ctxman"
+name = "rune"
 version = "0.1.0"
 description = "Static Instruction Injection Optimizer for LLM agents"
 requires-python = ">=3.11"
@@ -101,7 +101,7 @@ dependencies = [
 dev = ["pytest>=8.0", "pytest-tmp-files>=0.1"]
 
 [project.scripts]
-ctxman = "ctxman.cli.main:app"
+rune = "rune.cli.main:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -110,9 +110,9 @@ testpaths = ["tests"]
 - [ ] **Step 2: Create empty `__init__.py` files**
 
 ```bash
-mkdir -p ctxman/cli ctxman/adapters ctxman/pipeline ctxman/models ctxman/scaffold tests
-touch ctxman/__init__.py ctxman/cli/__init__.py ctxman/adapters/__init__.py
-touch ctxman/pipeline/__init__.py ctxman/models/__init__.py ctxman/scaffold/__init__.py
+mkdir -p rune/cli rune/adapters rune/pipeline rune/models rune/scaffold tests
+touch rune/__init__.py rune/cli/__init__.py rune/adapters/__init__.py
+touch rune/pipeline/__init__.py rune/models/__init__.py rune/scaffold/__init__.py
 touch tests/__init__.py
 ```
 
@@ -162,7 +162,7 @@ def complex_project(tmp_path: Path) -> Path:
 ```bash
 cd /Users/codex/Workspace/ToolSet/app
 pip install -e ".[dev]"
-python -c "import ctxman; print('OK')"
+python -c "import rune; print('OK')"
 ```
 
 Expected: `OK`
@@ -170,8 +170,8 @@ Expected: `OK`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pyproject.toml ctxman/ tests/conftest.py
-git commit -m "feat(ctxman): project scaffold and test fixtures"
+git add pyproject.toml rune/ tests/conftest.py
+git commit -m "feat(rune): project scaffold and test fixtures"
 ```
 
 ---
@@ -179,8 +179,8 @@ git commit -m "feat(ctxman): project scaffold and test fixtures"
 ## Task 2: Data Models
 
 **Files:**
-- Create: `ctxman/models/source.py`
-- Create: `ctxman/models/report.py`
+- Create: `rune/models/source.py`
+- Create: `rune/models/report.py`
 - Test: `tests/test_models.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -188,8 +188,8 @@ git commit -m "feat(ctxman): project scaffold and test fixtures"
 Create `tests/test_models.py`:
 
 ```python
-from ctxman.models.source import Chunk, InjectionSource
-from ctxman.models.report import AnalysisReport, DedupPair, TriggerResult
+from rune.models.source import Chunk, InjectionSource
+from rune.models.report import AnalysisReport, DedupPair, TriggerResult
 from pathlib import Path
 
 
@@ -241,7 +241,7 @@ pytest tests/test_models.py -v
 
 Expected: `ImportError` or `ModuleNotFoundError`
 
-- [ ] **Step 3: Create ctxman/models/source.py**
+- [ ] **Step 3: Create rune/models/source.py**
 
 ```python
 from dataclasses import dataclass, field
@@ -269,12 +269,12 @@ class InjectionSource:
         return sum(c.token_count for c in self.chunks)
 ```
 
-- [ ] **Step 4: Create ctxman/models/report.py**
+- [ ] **Step 4: Create rune/models/report.py**
 
 ```python
 from dataclasses import dataclass, field
 from pathlib import Path
-from ctxman.models.source import InjectionSource
+from rune.models.source import InjectionSource
 
 
 @dataclass
@@ -311,8 +311,8 @@ pytest tests/test_models.py -v
 Expected: 4 tests PASS
 
 ```bash
-git add ctxman/models/ tests/test_models.py
-git commit -m "feat(ctxman): data models (InjectionSource, Chunk, AnalysisReport)"
+git add rune/models/ tests/test_models.py
+git commit -m "feat(rune): data models (InjectionSource, Chunk, AnalysisReport)"
 ```
 
 ---
@@ -320,7 +320,7 @@ git commit -m "feat(ctxman): data models (InjectionSource, Chunk, AnalysisReport
 ## Task 3: Platform Detection + Adapter Interface
 
 **Files:**
-- Create: `ctxman/adapters/base.py`
+- Create: `rune/adapters/base.py`
 - Test: `tests/test_adapters.py` (partial)
 
 - [ ] **Step 1: Write failing tests for platform detection**
@@ -330,7 +330,7 @@ Create `tests/test_adapters.py`:
 ```python
 import pytest
 from pathlib import Path
-from ctxman.adapters.base import Platform, detect_platform
+from rune.adapters.base import Platform, detect_platform
 
 
 def test_detect_claude_code_by_dot_claude(tmp_path):
@@ -371,13 +371,13 @@ pytest tests/test_adapters.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/adapters/base.py**
+- [ ] **Step 3: Create rune/adapters/base.py**
 
 ```python
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
-from ctxman.models.source import InjectionSource
+from rune.models.source import InjectionSource
 
 
 class Platform(str, Enum):
@@ -420,8 +420,8 @@ pytest tests/test_adapters.py -v
 Expected: 6 tests PASS
 
 ```bash
-git add ctxman/adapters/base.py tests/test_adapters.py
-git commit -m "feat(ctxman): platform auto-detection and adapter interface"
+git add rune/adapters/base.py tests/test_adapters.py
+git commit -m "feat(rune): platform auto-detection and adapter interface"
 ```
 
 ---
@@ -429,7 +429,7 @@ git commit -m "feat(ctxman): platform auto-detection and adapter interface"
 ## Task 4: Tokenizer
 
 **Files:**
-- Create: `ctxman/pipeline/tokenizer.py`
+- Create: `rune/pipeline/tokenizer.py`
 - Test: `tests/test_tokenizer.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -438,7 +438,7 @@ Create `tests/test_tokenizer.py`:
 
 ```python
 from pathlib import Path
-from ctxman.pipeline.tokenizer import count_tokens, split_into_chunks
+from rune.pipeline.tokenizer import count_tokens, split_into_chunks
 
 
 def test_count_tokens_returns_int():
@@ -478,10 +478,10 @@ pytest tests/test_tokenizer.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/pipeline/tokenizer.py**
+- [ ] **Step 3: Create rune/pipeline/tokenizer.py**
 
 ```python
-from ctxman.models.source import Chunk
+from rune.models.source import Chunk
 
 try:
     import tiktoken
@@ -534,8 +534,8 @@ pytest tests/test_tokenizer.py -v
 Expected: 5 tests PASS
 
 ```bash
-git add ctxman/pipeline/tokenizer.py tests/test_tokenizer.py
-git commit -m "feat(ctxman): tokenizer with tiktoken and char-count fallback"
+git add rune/pipeline/tokenizer.py tests/test_tokenizer.py
+git commit -m "feat(rune): tokenizer with tiktoken and char-count fallback"
 ```
 
 ---
@@ -543,7 +543,7 @@ git commit -m "feat(ctxman): tokenizer with tiktoken and char-count fallback"
 ## Task 5: Claude Code Adapter
 
 **Files:**
-- Create: `ctxman/adapters/claude_code.py`
+- Create: `rune/adapters/claude_code.py`
 - Modify: `tests/test_adapters.py` (add ClaudeCodeAdapter tests)
 
 - [ ] **Step 1: Write failing tests**
@@ -551,7 +551,7 @@ git commit -m "feat(ctxman): tokenizer with tiktoken and char-count fallback"
 Append to `tests/test_adapters.py`:
 
 ```python
-from ctxman.adapters.claude_code import ClaudeCodeAdapter
+from rune.adapters.claude_code import ClaudeCodeAdapter
 
 
 def test_claude_code_adapter_empty_project(empty_project):
@@ -599,13 +599,13 @@ pytest tests/test_adapters.py::test_claude_code_adapter_empty_project -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/adapters/claude_code.py**
+- [ ] **Step 3: Create rune/adapters/claude_code.py**
 
 ```python
 from pathlib import Path
-from ctxman.adapters.base import InjectionAdapter
-from ctxman.models.source import InjectionSource
-from ctxman.pipeline.tokenizer import split_into_chunks
+from rune.adapters.base import InjectionAdapter
+from rune.models.source import InjectionSource
+from rune.pipeline.tokenizer import split_into_chunks
 
 
 class ClaudeCodeAdapter(InjectionAdapter):
@@ -665,8 +665,8 @@ pytest tests/test_adapters.py -v
 Expected: all adapter tests PASS
 
 ```bash
-git add ctxman/adapters/claude_code.py tests/test_adapters.py
-git commit -m "feat(ctxman): Claude Code adapter (CLAUDE.md, rules, skills)"
+git add rune/adapters/claude_code.py tests/test_adapters.py
+git commit -m "feat(rune): Claude Code adapter (CLAUDE.md, rules, skills)"
 ```
 
 ---
@@ -674,8 +674,8 @@ git commit -m "feat(ctxman): Claude Code adapter (CLAUDE.md, rules, skills)"
 ## Task 6: Generic Adapter + Cursor Adapter
 
 **Files:**
-- Create: `ctxman/adapters/generic.py`
-- Create: `ctxman/adapters/cursor.py`
+- Create: `rune/adapters/generic.py`
+- Create: `rune/adapters/cursor.py`
 - Modify: `tests/test_adapters.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -683,8 +683,8 @@ git commit -m "feat(ctxman): Claude Code adapter (CLAUDE.md, rules, skills)"
 Append to `tests/test_adapters.py`:
 
 ```python
-from ctxman.adapters.generic import GenericAdapter
-from ctxman.adapters.cursor import CursorAdapter
+from rune.adapters.generic import GenericAdapter
+from rune.adapters.cursor import CursorAdapter
 
 
 def test_generic_adapter_empty_project_no_crash(empty_project):
@@ -722,13 +722,13 @@ pytest tests/test_adapters.py -k "generic or cursor" -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/adapters/generic.py**
+- [ ] **Step 3: Create rune/adapters/generic.py**
 
 ```python
 from pathlib import Path
-from ctxman.adapters.base import InjectionAdapter
-from ctxman.models.source import InjectionSource
-from ctxman.pipeline.tokenizer import split_into_chunks
+from rune.adapters.base import InjectionAdapter
+from rune.models.source import InjectionSource
+from rune.pipeline.tokenizer import split_into_chunks
 
 _SKIP_DIRS = {".git", ".repo", "node_modules", "__pycache__", ".venv", "venv"}
 _AGENT_MD_NAMES = {"CLAUDE.md", "AGENTS.md", "GEMINI.md", "COPILOT.md"}
@@ -767,13 +767,13 @@ class GenericAdapter(InjectionAdapter):
             return ""
 ```
 
-- [ ] **Step 4: Create ctxman/adapters/cursor.py**
+- [ ] **Step 4: Create rune/adapters/cursor.py**
 
 ```python
 from pathlib import Path
-from ctxman.adapters.base import InjectionAdapter
-from ctxman.models.source import InjectionSource
-from ctxman.pipeline.tokenizer import split_into_chunks
+from rune.adapters.base import InjectionAdapter
+from rune.models.source import InjectionSource
+from rune.pipeline.tokenizer import split_into_chunks
 
 
 class CursorAdapter(InjectionAdapter):
@@ -816,8 +816,8 @@ pytest tests/test_adapters.py -v
 Expected: all adapter tests PASS
 
 ```bash
-git add ctxman/adapters/generic.py ctxman/adapters/cursor.py tests/test_adapters.py
-git commit -m "feat(ctxman): generic and cursor adapters"
+git add rune/adapters/generic.py rune/adapters/cursor.py tests/test_adapters.py
+git commit -m "feat(rune): generic and cursor adapters"
 ```
 
 ---
@@ -825,7 +825,7 @@ git commit -m "feat(ctxman): generic and cursor adapters"
 ## Task 7: Pipeline — INVENTORY
 
 **Files:**
-- Create: `ctxman/pipeline/inventory.py`
+- Create: `rune/pipeline/inventory.py`
 - Test: `tests/test_pipeline.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -835,8 +835,8 @@ Create `tests/test_pipeline.py`:
 ```python
 import pytest
 from pathlib import Path
-from ctxman.pipeline.inventory import run_inventory
-from ctxman.adapters.base import Platform
+from rune.pipeline.inventory import run_inventory
+from rune.adapters.base import Platform
 
 
 def test_inventory_empty_project(empty_project):
@@ -871,15 +871,15 @@ pytest tests/test_pipeline.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/pipeline/inventory.py**
+- [ ] **Step 3: Create rune/pipeline/inventory.py**
 
 ```python
 from pathlib import Path
-from ctxman.adapters.base import Platform, detect_platform, InjectionAdapter
-from ctxman.adapters.claude_code import ClaudeCodeAdapter
-from ctxman.adapters.cursor import CursorAdapter
-from ctxman.adapters.generic import GenericAdapter
-from ctxman.models.source import InjectionSource
+from rune.adapters.base import Platform, detect_platform, InjectionAdapter
+from rune.adapters.claude_code import ClaudeCodeAdapter
+from rune.adapters.cursor import CursorAdapter
+from rune.adapters.generic import GenericAdapter
+from rune.models.source import InjectionSource
 
 _ADAPTER_MAP: dict[Platform, InjectionAdapter] = {
     Platform.CLAUDE_CODE: ClaudeCodeAdapter(),
@@ -913,8 +913,8 @@ pytest tests/test_pipeline.py -v
 Expected: 4 tests PASS
 
 ```bash
-git add ctxman/pipeline/inventory.py tests/test_pipeline.py
-git commit -m "feat(ctxman): inventory pipeline stage (platform detect + source listing)"
+git add rune/pipeline/inventory.py tests/test_pipeline.py
+git commit -m "feat(rune): inventory pipeline stage (platform detect + source listing)"
 ```
 
 ---
@@ -922,7 +922,7 @@ git commit -m "feat(ctxman): inventory pipeline stage (platform detect + source 
 ## Task 8: Pipeline — SCORER (Tier 1 + Tier 2)
 
 **Files:**
-- Create: `ctxman/pipeline/scorer.py`
+- Create: `rune/pipeline/scorer.py`
 - Test: `tests/test_scorer.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -930,8 +930,8 @@ git commit -m "feat(ctxman): inventory pipeline stage (platform detect + source 
 Create `tests/test_scorer.py`:
 
 ```python
-from ctxman.models.source import Chunk
-from ctxman.pipeline.scorer import score_chunks_structural, score_chunks_tfidf
+from rune.models.source import Chunk
+from rune.pipeline.scorer import score_chunks_structural, score_chunks_tfidf
 
 
 def test_structural_scores_header_higher():
@@ -958,7 +958,7 @@ def test_structural_all_chunks_get_score():
 
 
 def test_tfidf_returns_scores(complex_project):
-    from ctxman.pipeline.inventory import run_inventory
+    from rune.pipeline.inventory import run_inventory
     sources, _ = run_inventory(complex_project)
     all_chunks = [c for s in sources for c in s.chunks]
     score_chunks_tfidf(all_chunks)
@@ -977,11 +977,11 @@ pytest tests/test_scorer.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/pipeline/scorer.py**
+- [ ] **Step 3: Create rune/pipeline/scorer.py**
 
 ```python
 import re
-from ctxman.models.source import Chunk
+from rune.models.source import Chunk
 
 _TRIGGER_PATTERN = re.compile(r"^(trigger|트리거)\s*:", re.IGNORECASE)
 _BOLD_PATTERN = re.compile(r"\*\*.+?\*\*")
@@ -1044,8 +1044,8 @@ pytest tests/test_scorer.py -v
 Expected: 5 tests PASS
 
 ```bash
-git add ctxman/pipeline/scorer.py tests/test_scorer.py
-git commit -m "feat(ctxman): scorer pipeline (Tier1 structural + Tier2 TF-IDF)"
+git add rune/pipeline/scorer.py tests/test_scorer.py
+git commit -m "feat(rune): scorer pipeline (Tier1 structural + Tier2 TF-IDF)"
 ```
 
 ---
@@ -1053,7 +1053,7 @@ git commit -m "feat(ctxman): scorer pipeline (Tier1 structural + Tier2 TF-IDF)"
 ## Task 9: Pipeline — DEDUP
 
 **Files:**
-- Create: `ctxman/pipeline/dedup.py`
+- Create: `rune/pipeline/dedup.py`
 - Test: `tests/test_dedup.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -1062,9 +1062,9 @@ Create `tests/test_dedup.py`:
 
 ```python
 from pathlib import Path
-from ctxman.models.source import Chunk, InjectionSource
-from ctxman.pipeline.dedup import find_dedup_pairs
-from ctxman.models.report import DedupPair
+from rune.models.source import Chunk, InjectionSource
+from rune.pipeline.dedup import find_dedup_pairs
+from rune.models.report import DedupPair
 
 
 def _make_source(path: str, text: str) -> InjectionSource:
@@ -1104,7 +1104,7 @@ def test_empty_list_returns_empty():
 
 
 def test_confidence_thresholds():
-    from ctxman.pipeline.dedup import _confidence
+    from rune.pipeline.dedup import _confidence
     assert _confidence(0.95) == "HIGH"
     assert _confidence(0.80) == "MEDIUM"
     assert _confidence(0.50) == "LOW"
@@ -1118,11 +1118,11 @@ pytest tests/test_dedup.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/pipeline/dedup.py**
+- [ ] **Step 3: Create rune/pipeline/dedup.py**
 
 ```python
-from ctxman.models.source import InjectionSource
-from ctxman.models.report import DedupPair
+from rune.models.source import InjectionSource
+from rune.models.report import DedupPair
 
 _HIGH_THRESHOLD = 0.92
 _MEDIUM_THRESHOLD = 0.75
@@ -1198,8 +1198,8 @@ pytest tests/test_dedup.py -v
 Expected: 5 tests PASS (sentence-transformers may download model on first run)
 
 ```bash
-git add ctxman/pipeline/dedup.py tests/test_dedup.py
-git commit -m "feat(ctxman): dedup pipeline (cosine similarity, confidence tiers)"
+git add rune/pipeline/dedup.py tests/test_dedup.py
+git commit -m "feat(rune): dedup pipeline (cosine similarity, confidence tiers)"
 ```
 
 ---
@@ -1207,7 +1207,7 @@ git commit -m "feat(ctxman): dedup pipeline (cosine similarity, confidence tiers
 ## Task 10: Pipeline — TRIGGER
 
 **Files:**
-- Create: `ctxman/pipeline/trigger.py`
+- Create: `rune/pipeline/trigger.py`
 - Test: `tests/test_trigger.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -1216,9 +1216,9 @@ Create `tests/test_trigger.py`:
 
 ```python
 from pathlib import Path
-from ctxman.models.source import Chunk, InjectionSource
-from ctxman.pipeline.trigger import extract_triggers
-from ctxman.models.report import TriggerResult
+from rune.models.source import Chunk, InjectionSource
+from rune.pipeline.trigger import extract_triggers
+from rune.models.report import TriggerResult
 
 
 def _make_source(path: str, text: str, trigger: str | None = None) -> InjectionSource:
@@ -1275,11 +1275,11 @@ pytest tests/test_trigger.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/pipeline/trigger.py**
+- [ ] **Step 3: Create rune/pipeline/trigger.py**
 
 ```python
-from ctxman.models.source import InjectionSource
-from ctxman.models.report import TriggerResult
+from rune.models.source import InjectionSource
+from rune.models.report import TriggerResult
 
 
 def extract_triggers(sources: list[InjectionSource]) -> list[TriggerResult]:
@@ -1334,17 +1334,17 @@ pytest tests/test_trigger.py -v
 Expected: 4 tests PASS
 
 ```bash
-git add ctxman/pipeline/trigger.py tests/test_trigger.py
-git commit -m "feat(ctxman): trigger extraction (regex parsed + TF-IDF fallback)"
+git add rune/pipeline/trigger.py tests/test_trigger.py
+git commit -m "feat(rune): trigger extraction (regex parsed + TF-IDF fallback)"
 ```
 
 ---
 
-## Task 11: ctxman analyze command
+## Task 11: rune analyze command
 
 **Files:**
-- Create: `ctxman/cli/main.py`
-- Create: `ctxman/cli/analyze.py`
+- Create: `rune/cli/main.py`
+- Create: `rune/cli/analyze.py`
 - Test: `tests/test_cli.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -1353,7 +1353,7 @@ Create `tests/test_cli.py`:
 
 ```python
 from typer.testing import CliRunner
-from ctxman.cli.main import app
+from rune.cli.main import app
 
 runner = CliRunner()
 
@@ -1400,17 +1400,17 @@ pytest tests/test_cli.py -v
 
 Expected: `ImportError`
 
-- [ ] **Step 3: Create ctxman/cli/main.py**
+- [ ] **Step 3: Create rune/cli/main.py**
 
 ```python
 import typer
-from ctxman.cli.analyze import analyze_cmd
+from rune.cli.analyze import analyze_cmd
 
-app = typer.Typer(name="ctxman", help="Static Instruction Injection Optimizer")
+app = typer.Typer(name="rune", help="Static Instruction Injection Optimizer")
 app.command("analyze")(analyze_cmd)
 ```
 
-- [ ] **Step 4: Create ctxman/cli/analyze.py**
+- [ ] **Step 4: Create rune/cli/analyze.py**
 
 ```python
 import json
@@ -1419,11 +1419,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ctxman.pipeline.inventory import run_inventory
-from ctxman.pipeline.scorer import score_chunks_structural, score_chunks_tfidf
-from ctxman.pipeline.dedup import find_dedup_pairs
-from ctxman.pipeline.trigger import extract_triggers
-from ctxman.models.report import AnalysisReport
+from rune.pipeline.inventory import run_inventory
+from rune.pipeline.scorer import score_chunks_structural, score_chunks_tfidf
+from rune.pipeline.dedup import find_dedup_pairs
+from rune.pipeline.trigger import extract_triggers
+from rune.models.report import AnalysisReport
 
 console = Console()
 
@@ -1443,7 +1443,7 @@ def analyze_cmd(
             typer.echo(json.dumps({"total_tokens": 0, "sources": [], "level": 0}))
         else:
             console.print(f"[yellow]설정 없음[/yellow] — {target}")
-            console.print("추천: [bold]ctxman init[/bold] 으로 시작하세요.")
+            console.print("추천: [bold]rune init[/bold] 으로 시작하세요.")
         return
 
     # Score
@@ -1498,7 +1498,7 @@ def _determine_level(sources) -> int:
 
 
 def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
-    console.print(f"\n[bold]ctxman analyze[/bold] — {target}")
+    console.print(f"\n[bold]rune analyze[/bold] — {target}")
     console.print(f"Platform: [cyan]{platform}[/cyan]\n")
 
     table = Table(title="주입 소스")
@@ -1521,7 +1521,7 @@ def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
     if report.level <= 1:
         console.print("\n[green]최적화 불필요[/green] — 설정이 적정합니다.")
     else:
-        console.print("\n추천: [bold]ctxman optimize --dry-run[/bold] 으로 최적화 미리보기")
+        console.print("\n추천: [bold]rune optimize --dry-run[/bold] 으로 최적화 미리보기")
 ```
 
 - [ ] **Step 5: Run tests and commit**
@@ -1533,22 +1533,22 @@ pytest tests/test_cli.py -v
 Expected: 5 tests PASS
 
 ```bash
-git add ctxman/cli/ tests/test_cli.py
-git commit -m "feat(ctxman): analyze command with level-aware output and JSON mode"
+git add rune/cli/ tests/test_cli.py
+git commit -m "feat(rune): analyze command with level-aware output and JSON mode"
 ```
 
 ---
 
-## Task 12: ctxman init + scaffold
+## Task 12: rune init + scaffold
 
 **Files:**
-- Create: `ctxman/cli/init_cmd.py`
-- Create: `ctxman/cli/scaffold.py`
-- Create: `ctxman/scaffold/generator.py`
-- Create: `ctxman/scaffold/templates/claude-code-base/CLAUDE.md`
-- Create: `ctxman/scaffold/templates/claude-code-base/rules/git.md`
-- Create: `ctxman/scaffold/templates/python-backend/CLAUDE.md`
-- Modify: `ctxman/cli/main.py`
+- Create: `rune/cli/init_cmd.py`
+- Create: `rune/cli/scaffold.py`
+- Create: `rune/scaffold/generator.py`
+- Create: `rune/scaffold/templates/claude-code-base/CLAUDE.md`
+- Create: `rune/scaffold/templates/claude-code-base/rules/git.md`
+- Create: `rune/scaffold/templates/python-backend/CLAUDE.md`
+- Modify: `rune/cli/main.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -1587,7 +1587,7 @@ Expected: command not found errors
 
 - [ ] **Step 3: Create template files**
 
-`ctxman/scaffold/templates/claude-code-base/CLAUDE.md`:
+`rune/scaffold/templates/claude-code-base/CLAUDE.md`:
 ```markdown
 # Project
 
@@ -1604,7 +1604,7 @@ Expected: command not found errors
 | git, commit, push | rules/git.md |
 ```
 
-`ctxman/scaffold/templates/claude-code-base/rules/git.md`:
+`rune/scaffold/templates/claude-code-base/rules/git.md`:
 ```markdown
 # Git Rules
 
@@ -1617,7 +1617,7 @@ Trigger: git, commit, push
 - One logical change per commit
 ```
 
-`ctxman/scaffold/templates/python-backend/CLAUDE.md`:
+`rune/scaffold/templates/python-backend/CLAUDE.md`:
 ```markdown
 # Python Backend Project
 
@@ -1635,7 +1635,7 @@ Trigger: git, commit, push
 | deploy, production | rules/deploy.md |
 ```
 
-- [ ] **Step 4: Create ctxman/scaffold/generator.py**
+- [ ] **Step 4: Create rune/scaffold/generator.py**
 
 ```python
 import shutil
@@ -1665,14 +1665,14 @@ def available_types() -> list[str]:
     return sorted(_AVAILABLE_TYPES)
 ```
 
-- [ ] **Step 5: Create ctxman/cli/init_cmd.py and scaffold.py**
+- [ ] **Step 5: Create rune/cli/init_cmd.py and scaffold.py**
 
-`ctxman/cli/init_cmd.py`:
+`rune/cli/init_cmd.py`:
 ```python
 from pathlib import Path
 import typer
 from rich.console import Console
-from ctxman.scaffold.generator import scaffold_project
+from rune.scaffold.generator import scaffold_project
 
 console = Console()
 
@@ -1680,22 +1680,22 @@ console = Console()
 def init_cmd(
     path: Path = typer.Argument(default=None, help="Project directory"),
 ):
-    """Initialize a new ctxman-optimized project structure."""
+    """Initialize a new rune-optimized project structure."""
     target = path or Path.cwd()
     success = scaffold_project(target, "claude-code-base")
     if success:
         console.print(f"[green]초기화 완료[/green] — {target}")
-        console.print("다음 단계: [bold]ctxman watch[/bold] 로 세션 데이터 수집 시작")
+        console.print("다음 단계: [bold]rune watch[/bold] 로 세션 데이터 수집 시작")
     else:
         console.print("[red]초기화 실패[/red]")
 ```
 
-`ctxman/cli/scaffold.py`:
+`rune/cli/scaffold.py`:
 ```python
 from pathlib import Path
 import typer
 from rich.console import Console
-from ctxman.scaffold.generator import scaffold_project, available_types
+from rune.scaffold.generator import scaffold_project, available_types
 
 console = Console()
 
@@ -1714,15 +1714,15 @@ def scaffold_cmd(
         console.print(f"사용 가능: {', '.join(available_types())}")
 ```
 
-- [ ] **Step 6: Update ctxman/cli/main.py**
+- [ ] **Step 6: Update rune/cli/main.py**
 
 ```python
 import typer
-from ctxman.cli.analyze import analyze_cmd
-from ctxman.cli.init_cmd import init_cmd
-from ctxman.cli.scaffold import scaffold_cmd
+from rune.cli.analyze import analyze_cmd
+from rune.cli.init_cmd import init_cmd
+from rune.cli.scaffold import scaffold_cmd
 
-app = typer.Typer(name="ctxman", help="Static Instruction Injection Optimizer")
+app = typer.Typer(name="rune", help="Static Instruction Injection Optimizer")
 app.command("analyze")(analyze_cmd)
 app.command("init")(init_cmd)
 app.command("scaffold")(scaffold_cmd)
@@ -1737,18 +1737,18 @@ pytest tests/test_cli.py -v
 Expected: all CLI tests PASS
 
 ```bash
-git add ctxman/cli/init_cmd.py ctxman/cli/scaffold.py ctxman/cli/main.py \
-        ctxman/scaffold/ tests/test_cli.py
-git commit -m "feat(ctxman): init and scaffold commands with templates"
+git add rune/cli/init_cmd.py rune/cli/scaffold.py rune/cli/main.py \
+        rune/scaffold/ tests/test_cli.py
+git commit -m "feat(rune): init and scaffold commands with templates"
 ```
 
 ---
 
-## Task 13: ctxman watch (events.jsonl)
+## Task 13: rune watch (events.jsonl)
 
 **Files:**
-- Create: `ctxman/cli/watch.py`
-- Modify: `ctxman/cli/main.py`
+- Create: `rune/cli/watch.py`
+- Modify: `rune/cli/main.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -1761,7 +1761,7 @@ import json
 def test_watch_creates_events_file(tmp_path, monkeypatch):
     events_file = tmp_path / "events.jsonl"
     # Simulate one tick by patching the watch loop
-    from ctxman.cli import watch as watch_module
+    from rune.cli import watch as watch_module
     monkeypatch.setattr(watch_module, "_collect_event", lambda p: {
         "session_id": "test",
         "sources_loaded": [],
@@ -1774,7 +1774,7 @@ def test_watch_creates_events_file(tmp_path, monkeypatch):
     assert "session_id" in data
 ```
 
-- [ ] **Step 2: Create ctxman/cli/watch.py**
+- [ ] **Step 2: Create rune/cli/watch.py**
 
 ```python
 import json
@@ -1796,7 +1796,7 @@ def append_event(events_file: Path, event: dict) -> None:
 
 def _collect_event(project_path: Path) -> dict:
     """Collect a single session snapshot."""
-    from ctxman.pipeline.inventory import run_inventory
+    from rune.pipeline.inventory import run_inventory
     sources, _ = run_inventory(project_path)
     return {
         "sources_loaded": [str(s.path) for s in sources],
@@ -1827,16 +1827,16 @@ def watch_cmd(
         console.print("\n[yellow]Watch stopped.[/yellow]")
 ```
 
-- [ ] **Step 3: Update ctxman/cli/main.py**
+- [ ] **Step 3: Update rune/cli/main.py**
 
 ```python
 import typer
-from ctxman.cli.analyze import analyze_cmd
-from ctxman.cli.init_cmd import init_cmd
-from ctxman.cli.scaffold import scaffold_cmd
-from ctxman.cli.watch import watch_cmd
+from rune.cli.analyze import analyze_cmd
+from rune.cli.init_cmd import init_cmd
+from rune.cli.scaffold import scaffold_cmd
+from rune.cli.watch import watch_cmd
 
-app = typer.Typer(name="ctxman", help="Static Instruction Injection Optimizer")
+app = typer.Typer(name="rune", help="Static Instruction Injection Optimizer")
 app.command("analyze")(analyze_cmd)
 app.command("init")(init_cmd)
 app.command("scaffold")(scaffold_cmd)
@@ -1852,8 +1852,8 @@ pytest tests/test_cli.py -v
 Expected: all tests PASS
 
 ```bash
-git add ctxman/cli/watch.py ctxman/cli/main.py tests/test_cli.py
-git commit -m "feat(ctxman): watch command for events.jsonl session logging"
+git add rune/cli/watch.py rune/cli/main.py tests/test_cli.py
+git commit -m "feat(rune): watch command for events.jsonl session logging"
 ```
 
 ---
@@ -1875,7 +1875,7 @@ import json
 import time
 from pathlib import Path
 from typer.testing import CliRunner
-from ctxman.cli.main import app
+from rune.cli.main import app
 
 runner = CliRunner()
 
@@ -1980,7 +1980,7 @@ Expected: PASS with timing < 30s
 
 ```bash
 git add tests/test_e2e.py
-git commit -m "test(ctxman): E2E benchmarks Benchmark-0 through Benchmark-2"
+git commit -m "test(rune): E2E benchmarks Benchmark-0 through Benchmark-2"
 ```
 
 ---
@@ -1993,7 +1993,7 @@ git commit -m "test(ctxman): E2E benchmarks Benchmark-0 through Benchmark-2"
 - [ ] **Step 1: Create README.md**
 
 ```markdown
-# ctxman — Context Instruction Manager
+# rune — Context Instruction Manager
 
 Static Instruction Injection Optimizer for LLM agents (Claude Code, Cursor, Copilot).
 
@@ -2003,22 +2003,22 @@ an unaddressed layer that RTK and context-mode don't touch.
 ## Quick Start
 
 \```bash
-pip install ctxman
+pip install rune
 
 # Analyze any project (works on empty projects too)
-ctxman analyze .
+rune analyze .
 
 # Initialize a new project
-ctxman init
+rune init
 
 # Generate project-type templates
-ctxman scaffold --type python-backend
+rune scaffold --type python-backend
 \```
 
 ## Example Output
 
 \```
-ctxman analyze — /Users/alice/my-project
+rune analyze — /Users/alice/my-project
 Platform: claude_code
 
 ┌─────────────────┬──────────┬───────┐
@@ -2033,7 +2033,7 @@ Platform: claude_code
 중복 탐지: 1쌍 (HIGH confidence)
   - git.md ↔ duplicate.md (97.3%)
 
-추천: ctxman optimize --dry-run 으로 최적화 미리보기
+추천: rune optimize --dry-run 으로 최적화 미리보기
 \```
 
 ## Supported Platforms
@@ -2048,10 +2048,10 @@ Platform: claude_code
 
 | Command | Description |
 |---------|-------------|
-| `ctxman analyze [path]` | Analyze token injection |
-| `ctxman init [path]` | Initialize project structure |
-| `ctxman scaffold --type <t>` | Generate rule templates |
-| `ctxman watch [path]` | Monitor session token usage |
+| `rune analyze [path]` | Analyze token injection |
+| `rune init [path]` | Initialize project structure |
+| `rune scaffold --type <t>` | Generate rule templates |
+| `rune watch [path]` | Monitor session token usage |
 
 ## Algorithm
 
@@ -2073,7 +2073,7 @@ pytest tests/
 
 ```bash
 pip install -e .
-ctxman --help
+rune --help
 ```
 
 Expected: help text showing analyze, init, scaffold, watch commands
@@ -2090,7 +2090,7 @@ Expected: all tests PASS
 
 ```bash
 git add README.md
-git commit -m "docs(ctxman): README with quick start, commands, algorithm overview"
+git commit -m "docs(rune): README with quick start, commands, algorithm overview"
 ```
 
 - [ ] **Step 5: Tag v0.1.0**
@@ -2115,9 +2115,9 @@ git tag v0.1.0
 | 3-Tier Scorer (Tier 1+2) | Task 8 |
 | DEDUP cosine similarity + 신뢰도 | Task 9 |
 | TRIGGER extraction | Task 10 |
-| ctxman analyze command | Task 11 |
-| ctxman init + scaffold | Task 12 |
-| ctxman watch + events.jsonl | Task 13 |
+| rune analyze command | Task 11 |
+| rune init + scaffold | Task 12 |
+| rune watch + events.jsonl | Task 13 |
 | Benchmark-0 (빈 프로젝트 no crash) | Task 14 |
 | Benchmark-2 (pmo-vault 중복 탐지) | Task 14 |
 | README + PyPI | Task 15 |
