@@ -1,0 +1,19 @@
+{
+  "name": "rune",
+  "version": "0.1.0",
+  "description": "Static Instruction Injection Optimizer — measure and reduce token bloat in your AI agent rules",
+  "author": {
+    "name": "codex-devlab"
+  },
+  "homepage": "https://github.com/codex-devlab/rune",
+  "repository": "https://github.com/codex-devlab/rune",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "tokens",
+    "optimization",
+    "rules",
+    "injection",
+    "siop"
+  ]
+}
