@@ -68,6 +68,7 @@ Platform: claude_code
 | **GitHub Copilot** | `.github/copilot-instructions.md` · `.github/copilot/` |
 | **Gemini CLI** | `GEMINI.md` · `.gemini/` directory |
 | **Windsurf** | `.windsurfrules` |
+| **OpenCode** | `.opencode/` directory |
 | **Generic** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` scan |
 
 Multi-platform projects are supported — rune runs all matching adapters and deduplicates sources.

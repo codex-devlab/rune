@@ -10,6 +10,7 @@ class Platform(str, Enum):
     COPILOT = "copilot"
     GEMINI = "gemini"
     WINDSURF = "windsurf"
+    OPENCODE = "opencode"
     GENERIC = "generic"
 
 
@@ -25,6 +26,8 @@ def detect_platform(path: Path) -> Platform:
         return Platform.GEMINI
     if (path / ".windsurfrules").exists():
         return Platform.WINDSURF
+    if (path / ".opencode").exists():
+        return Platform.OPENCODE
     return Platform.GENERIC
 
 

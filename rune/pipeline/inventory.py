@@ -5,6 +5,7 @@ from rune.adapters.cursor import CursorAdapter
 from rune.adapters.copilot import CopilotAdapter
 from rune.adapters.gemini import GeminiAdapter
 from rune.adapters.windsurf import WindsurfAdapter
+from rune.adapters.opencode import OpenCodeAdapter
 from rune.adapters.generic import GenericAdapter
 from rune.models.source import InjectionSource
 
@@ -15,6 +16,7 @@ _ADAPTERS: list[tuple[Platform, InjectionAdapter]] = [
     (Platform.COPILOT, CopilotAdapter()),
     (Platform.GEMINI, GeminiAdapter()),
     (Platform.WINDSURF, WindsurfAdapter()),
+    (Platform.OPENCODE, OpenCodeAdapter()),
     (Platform.GENERIC, GenericAdapter()),
 ]
 

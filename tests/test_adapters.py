@@ -7,6 +7,7 @@ from rune.adapters.cursor import CursorAdapter
 from rune.adapters.copilot import CopilotAdapter
 from rune.adapters.gemini import GeminiAdapter
 from rune.adapters.windsurf import WindsurfAdapter
+from rune.adapters.opencode import OpenCodeAdapter
 from rune.pipeline.inventory import run_inventory
 
 
@@ -187,6 +188,37 @@ def test_windsurf_adapter_finds_rules(tmp_path):
 
 def test_windsurf_adapter_empty_no_crash(tmp_path):
     assert WindsurfAdapter().list_sources(tmp_path) == []
+
+
+# ─── OpenCode ─────────────────────────────────────────────────────────────────
+
+def test_detect_opencode(tmp_path):
+    (tmp_path / ".opencode").mkdir()
+    assert detect_platform(tmp_path) == Platform.OPENCODE
+
+
+def test_opencode_adapter_detect(tmp_path):
+    (tmp_path / ".opencode").mkdir()
+    assert OpenCodeAdapter().detect(tmp_path) is True
+
+
+def test_opencode_adapter_detect_false(tmp_path):
+    assert OpenCodeAdapter().detect(tmp_path) is False
+
+
+def test_opencode_adapter_finds_agents(tmp_path):
+    agents = tmp_path / ".opencode" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "reviewer.md").write_text("Review all code carefully.")
+    (agents / "tester.md").write_text("Write comprehensive tests.")
+    sources = OpenCodeAdapter().list_sources(tmp_path)
+    assert len(sources) == 2
+    assert all(s.source_type == "opencode_agent" for s in sources)
+
+
+def test_opencode_adapter_empty_no_crash(tmp_path):
+    (tmp_path / ".opencode").mkdir()
+    assert OpenCodeAdapter().list_sources(tmp_path) == []
 
 
 # ─── Multi-platform ───────────────────────────────────────────────────────────
