@@ -1,0 +1,20 @@
+{
+  "name": "codex-devlab",
+  "description": "codex-devlab plugins",
+  "owner": {
+    "name": "codex-devlab"
+  },
+  "plugins": [
+    {
+      "name": "rune",
+      "description": "Static Instruction Injection Optimizer — measure and reduce token bloat in your AI agent rules",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "codex-devlab"
+      },
+      "category": "productivity",
+      "homepage": "https://github.com/codex-devlab/rune"
+    }
+  ]
+}
