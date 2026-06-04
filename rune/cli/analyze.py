@@ -93,7 +93,11 @@ def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
     table.add_column("토큰", justify="right")
 
     for s in report.sources:
-        table.add_row(str(s.path.name), s.source_type, str(s.token_count))
+        try:
+            rel = s.path.relative_to(target)
+        except ValueError:
+            rel = s.path
+        table.add_row(str(rel), s.source_type, str(s.token_count))
 
     console.print(table)
     console.print(f"\n[bold]총 토큰[/bold]: {report.total_tokens:,}")
@@ -101,8 +105,15 @@ def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
     high_pairs = [p for p in report.dedup_pairs if p.confidence == "HIGH"]
     if high_pairs:
         console.print(f"[red]중복 탐지[/red]: {len(high_pairs)}쌍 (HIGH confidence)")
-        for p in high_pairs:
-            console.print(f"  - {p.source_a.name} ↔ {p.source_b.name} ({p.similarity:.2%})")
+        for p in high_pairs[:10]:
+            try:
+                a = p.source_a.relative_to(target)
+                b = p.source_b.relative_to(target)
+            except ValueError:
+                a, b = p.source_a, p.source_b
+            console.print(f"  - {a} ↔ {b} ({p.similarity:.2%})")
+        if len(high_pairs) > 10:
+            console.print(f"  ... 외 {len(high_pairs) - 10}쌍")
 
     if report.level <= 1:
         console.print("\n[green]최적화 불필요[/green] — 설정이 적정합니다.")
