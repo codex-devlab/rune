@@ -65,7 +65,12 @@ Platform: claude_code
 |---|---|
 | **Claude Code** | `.claude/` directory · `CLAUDE.md` |
 | **Cursor** | `.cursor/` directory · `.cursorrules` |
-| **Generic** | `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` scan |
+| **GitHub Copilot** | `.github/copilot-instructions.md` · `.github/copilot/` |
+| **Gemini CLI** | `GEMINI.md` · `.gemini/` directory |
+| **Windsurf** | `.windsurfrules` |
+| **Generic** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` scan |
+
+Multi-platform projects are supported — rune runs all matching adapters and deduplicates sources.
 
 ## Commands
 
