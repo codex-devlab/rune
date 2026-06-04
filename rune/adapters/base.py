@@ -8,20 +8,23 @@ class Platform(str, Enum):
     CLAUDE_CODE = "claude_code"
     CURSOR = "cursor"
     COPILOT = "copilot"
+    GEMINI = "gemini"
+    WINDSURF = "windsurf"
     GENERIC = "generic"
 
 
 def detect_platform(path: Path) -> Platform:
-    if (path / ".claude").exists():
+    """Return the primary platform. For multi-platform projects use run_inventory()."""
+    if (path / ".claude").exists() or (path / "CLAUDE.md").exists():
         return Platform.CLAUDE_CODE
-    if (path / ".cursor").exists():
+    if (path / ".cursor").exists() or (path / ".cursorrules").exists():
         return Platform.CURSOR
-    if (path / ".github" / "copilot").exists():
+    if (path / ".github" / "copilot-instructions.md").exists() or (path / ".github" / "copilot").exists():
         return Platform.COPILOT
-    if any(path.glob("CLAUDE.md")):
-        return Platform.CLAUDE_CODE
-    if any(path.glob(".cursorrules")):
-        return Platform.CURSOR
+    if (path / "GEMINI.md").exists() or (path / ".gemini").exists():
+        return Platform.GEMINI
+    if (path / ".windsurfrules").exists():
+        return Platform.WINDSURF
     return Platform.GENERIC
 
 
