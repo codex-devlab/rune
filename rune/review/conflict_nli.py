@@ -27,11 +27,24 @@ def find_nli_conflicts(
         )
     from sentence_transformers import CrossEncoder
     model = CrossEncoder(model_name)
+
+    # Dynamically resolve contradiction label index — different cross-encoder checkpoints
+    # have different label orderings; do not assume MNLI [contradiction, entailment, neutral]
+    id2label = model.config.id2label
+    contradiction_idx = next(
+        (i for i, lbl in id2label.items() if "contradict" in lbl.lower()),
+        None,
+    )
+    if contradiction_idx is None:
+        raise RuntimeError(
+            f"NLI model {model_name} has no 'contradiction' label in id2label={id2label}; "
+            "incompatible checkpoint."
+        )
+
     pairs: list[ConflictPair] = []
     for ref_a, ref_b in candidate_pairs:
         scores = model.predict([(ref_a.text, ref_b.text), (ref_b.text, ref_a.text)])
-        # MNLI label order is typically [contradiction, entailment, neutral] for these models
-        contradiction_score = max(scores[0][0], scores[1][0])
+        contradiction_score = max(scores[0][contradiction_idx], scores[1][contradiction_idx])
         if contradiction_score > 0.7:
             pairs.append(ConflictPair(
                 a=ref_a, b=ref_b,
