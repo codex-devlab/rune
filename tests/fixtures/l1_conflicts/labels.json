@@ -1,0 +1,4 @@
+{
+  "positives": ["p01.md", "p02.md", "p03.md", "p04.md", "p05.md", "p06.md", "p07.md", "p08.md", "p09.md", "p10.md", "p11.md", "p12.md", "p13.md", "p14.md", "p15.md", "p16.md", "p17.md", "p18.md", "p19.md", "p20.md"],
+  "negatives": ["n01.md", "n02.md", "n03.md", "n04.md", "n05.md", "n06.md", "n07.md", "n08.md", "n09.md", "n10.md", "n11.md", "n12.md", "n13.md", "n14.md", "n15.md", "n16.md", "n17.md", "n18.md", "n19.md", "n20.md"]
+}

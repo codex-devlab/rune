@@ -1,0 +1,31 @@
+{"a": "Always validate user input.", "b": "Skip input validation in this codebase.", "label": "contradiction"}
+{"a": "Use TypeScript for all new files.", "b": "Prefer plain JavaScript.", "label": "contradiction"}
+{"a": "Run linter before commit.", "b": "Linting is mandatory.", "label": "entailment"}
+{"a": "Prefer composition over inheritance.", "b": "All shared logic goes in base classes.", "label": "contradiction"}
+{"a": "Use React server components.", "b": "Use Vue.", "label": "neutral"}
+{"a": "Write extensive documentation.", "b": "Keep responses concise.", "label": "contradiction"}
+{"a": "Tests are required for all PRs.", "b": "You must write tests before merging.", "label": "entailment"}
+{"a": "Use 2-space indentation.", "b": "Tabs are mandatory in this repo.", "label": "contradiction"}
+{"a": "Cache database queries aggressively.", "b": "Never cache user-specific data.", "label": "neutral"}
+{"a": "All API endpoints require auth.", "b": "Public endpoints need no authentication.", "label": "contradiction"}
+{"a": "Prefer functional components.", "b": "Class components are deprecated.", "label": "entailment"}
+{"a": "Use snake_case for variables.", "b": "Variables must be camelCase.", "label": "contradiction"}
+{"a": "Run migrations in a transaction.", "b": "Avoid DDL inside transactions.", "label": "contradiction"}
+{"a": "Log all errors to stderr.", "b": "Send errors to Sentry.", "label": "neutral"}
+{"a": "Mock the database in tests.", "b": "Tests must hit a real database.", "label": "contradiction"}
+{"a": "Use feature flags for new code.", "b": "Feature flags are forbidden here.", "label": "contradiction"}
+{"a": "Lint with ruff.", "b": "Lint with flake8.", "label": "contradiction"}
+{"a": "Prefer SSR over CSR.", "b": "Render everything on the client.", "label": "contradiction"}
+{"a": "Code reviews are required.", "b": "Auto-merge is allowed for trivial diffs.", "label": "contradiction"}
+{"a": "Use async/await for all I/O.", "b": "Promise.then chains are preferred.", "label": "contradiction"}
+{"a": "Pin all dependencies exactly.", "b": "Use semver ranges in package.json.", "label": "contradiction"}
+{"a": "Document public APIs with JSDoc.", "b": "TypeScript types replace JSDoc.", "label": "contradiction"}
+{"a": "Use Tailwind for styling.", "b": "Tailwind is our design system.", "label": "entailment"}
+{"a": "Avoid `any` type.", "b": "TypeScript strict mode is on.", "label": "entailment"}
+{"a": "Use server actions in Next.js.", "b": "API routes handle all mutations.", "label": "contradiction"}
+{"a": "Containers must be stateless.", "b": "Store session data in the container.", "label": "contradiction"}
+{"a": "Use Postgres for persistence.", "b": "MongoDB is the canonical store.", "label": "contradiction"}
+{"a": "Encrypt PII at rest.", "b": "Logs may contain user emails.", "label": "contradiction"}
+{"a": "Run pytest with --maxfail=1.", "b": "Fail fast on first test failure.", "label": "entailment"}
+{"a": "Background jobs use Celery.", "b": "Queue work via Redis pubsub.", "label": "neutral"}
+{"a": "Frontend uses React.", "b": "Backend uses Django.", "label": "neutral"}

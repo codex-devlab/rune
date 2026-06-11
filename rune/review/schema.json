@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["schema_version", "detector_tier", "conflicts", "dead_candidates"],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1.0", "1.1"]},
+    "detector_tier": {"type": "string", "enum": ["L1", "L2"]},
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["a", "b", "reason", "confidence", "source"],
+        "properties": {
+          "a": {"$ref": "#/definitions/chunk_ref"},
+          "b": {"$ref": "#/definitions/chunk_ref"},
+          "reason": {"type": "string"},
+          "confidence": {"type": "number"},
+          "source": {"type": "string", "enum": ["lexical", "nli"]}
+        }
+      }
+    },
+    "dead_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chunk", "reason", "stage"],
+        "properties": {
+          "chunk": {"$ref": "#/definitions/chunk_ref"},
+          "reason": {"type": "string"},
+          "stage": {"type": "string", "enum": ["static", "events"]}
+        }
+      }
+    }
+  },
+  "definitions": {
+    "chunk_ref": {
+      "type": "object",
+      "required": ["path", "start_line", "end_line", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "start_line": {"type": "integer"},
+        "end_line": {"type": "integer"},
+        "sha256": {"type": "string"}
+      }
+    }
+  }
+}
