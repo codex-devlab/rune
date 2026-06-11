@@ -63,3 +63,13 @@ def apply_operations(ops: list[Operation], backup_dir: Path) -> dict:
     import json as _json
     (snapshot_root / "operation_log.json").write_text(_json.dumps(log, indent=2))
     return log
+
+
+def prune_backups(backup_dir: Path, keep: int = 10) -> int:
+    if not backup_dir.exists():
+        return 0
+    snaps = sorted([p for p in backup_dir.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime)
+    to_remove = snaps[:-keep] if len(snaps) > keep else []
+    for p in to_remove:
+        shutil.rmtree(p)
+    return len(to_remove)
