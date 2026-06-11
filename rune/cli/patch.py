@@ -31,6 +31,15 @@ def apply_cmd(
     for entry in entries:
         target = Path(entry.target_path)
         payload = Path(entry.payload_path)
+        # New-file case: pre_sha256 is empty and target doesn't exist yet
+        if entry.pre_sha256 == "" and not target.exists():
+            if dry_run:
+                print(f"WOULD CREATE: {target}")
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(payload, target)
+            print(f"CREATED: {target}")
+            continue
         if not target.exists():
             print(f"MISSING: {target}")
             raise typer.Exit(1)

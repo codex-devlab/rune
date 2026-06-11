@@ -52,6 +52,29 @@ applied_at_iso = "2026-06-11T00:00:00Z"
     assert target.read_text() == "after"
 
 
+def test_patch_apply_creates_new_file(tmp_path):
+    payload = tmp_path / "payload.py"
+    payload.write_text("brand new content")
+    post = hashlib.sha256(b"brand new content").hexdigest()
+    target = tmp_path / "subdir" / "new_module.py"  # doesn't exist
+    manifest = tmp_path / "m.toml"
+    manifest.write_text(f"""
+[[patch]]
+target_path = "{target}"
+pre_sha256 = ""
+post_sha256 = "{post}"
+payload_path = "{payload}"
+description = "create new module"
+applied_at_iso = "2026-06-11T00:00:00Z"
+""")
+    result = subprocess.run(
+        ["rune", "patch", "apply", "--manifest", str(manifest)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert target.read_text() == "brand new content"
+
+
 def test_patch_verify_perf_20_entries(tmp_path):
     files = [tmp_path / f"f{i}.py" for i in range(20)]
     for f in files:
