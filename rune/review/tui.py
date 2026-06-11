@@ -1,3 +1,5 @@
+import os
+
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, ListView, ListItem, Label
 from textual.containers import Horizontal
@@ -21,11 +23,30 @@ class ReviewApp(App):
         ("G", "goto_last", "Last"),
     ]
 
-    def __init__(self, findings: list):
+    def __init__(self, findings: list, watch_files: bool = False):
         super().__init__()
         self.findings = findings
         self.cursor = 0
         self.selected: set[int] = set()
+        self.stale_banner_visible = False
+        self._watch_files = watch_files
+        self._initial_mtimes: dict[str, float] = {
+            f["path"]: f.get("mtime_at_scan", 0.0) for f in findings if "path" in f
+        }
+
+    def on_mount(self):
+        if self._watch_files:
+            self.set_interval(0.5, self._check_staleness)
+
+    def _check_staleness(self):
+        for path, mtime0 in self._initial_mtimes.items():
+            try:
+                if os.path.getmtime(path) > mtime0:
+                    self.stale_banner_visible = True
+                    return
+            except FileNotFoundError:
+                self.stale_banner_visible = True
+                return
 
     def compose(self) -> ComposeResult:
         yield Header()
