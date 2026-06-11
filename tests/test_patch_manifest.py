@@ -1,4 +1,5 @@
 import hashlib
+import pytest
 from pathlib import Path
 from rune.patches.manifest import PatchEntry, load_manifest, verify_entry
 
@@ -45,3 +46,22 @@ def test_verify_entry_drift(tmp_path):
     )
     result = verify_entry(entry, base_dir=tmp_path)
     assert result.startswith("DRIFT")
+
+def test_load_manifest_raises_on_malformed_toml(tmp_path):
+    manifest = tmp_path / "bad.toml"
+    manifest.write_text("this is = not valid [ toml")
+    with pytest.raises(ValueError) as excinfo:
+        load_manifest(manifest)
+    assert str(manifest) in str(excinfo.value)
+
+def test_load_manifest_raises_on_missing_required_field(tmp_path):
+    manifest = tmp_path / "incomplete.toml"
+    manifest.write_text("""
+[[patch]]
+target_path = "rune/cli/main.py"
+pre_sha256 = "abc"
+# missing post_sha256, payload_path, description, applied_at_iso
+""")
+    with pytest.raises(ValueError) as excinfo:
+        load_manifest(manifest)
+    assert "missing required field" in str(excinfo.value).lower()

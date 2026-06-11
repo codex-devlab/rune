@@ -14,10 +14,22 @@ class PatchEntry:
     applied_at_iso: str
 
 
+_REQUIRED_FIELDS = ("target_path", "pre_sha256", "post_sha256", "payload_path", "description", "applied_at_iso")
+
+
 def load_manifest(path: Path) -> list[PatchEntry]:
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
-    return [PatchEntry(**p) for p in data.get("patch", [])]
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"malformed TOML in {path}: {e}") from e
+    entries = []
+    for i, p in enumerate(data.get("patch", [])):
+        for field in _REQUIRED_FIELDS:
+            if field not in p:
+                raise ValueError(f"manifest entry {i} missing required field: {field}")
+        entries.append(PatchEntry(**p))
+    return entries
 
 
 def _file_sha256(p: Path) -> str:
