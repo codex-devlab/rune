@@ -14,7 +14,7 @@ def test_apply_refuses_stale_chunk(tmp_path):
     # Mutate the file externally
     target.write_text("line1\nNever use TS.\n\nline3\n")
     with pytest.raises(StaleChunkError):
-        apply_operations([Operation(kind="delete", ref=ref)], backup_dir=tmp_path / "bk")
+        apply_operations([Operation(kind="delete", ref=ref)], backup_dir=tmp_path / "bk", base_root=tmp_path)
 
 def test_apply_deletes_chunk(tmp_path):
     target = tmp_path / "rule.md"
@@ -22,7 +22,7 @@ def test_apply_deletes_chunk(tmp_path):
     text = "Always use TS."
     sha = hashlib.sha256(text.encode()).hexdigest()
     ref = ChunkRef(path=target, start_line=2, end_line=2, sha256=sha, text=text)
-    apply_operations([Operation(kind="delete", ref=ref)], backup_dir=tmp_path / "bk")
+    apply_operations([Operation(kind="delete", ref=ref)], backup_dir=tmp_path / "bk", base_root=tmp_path)
     assert "Always use TS" not in target.read_text()
     assert (tmp_path / "bk").exists()
 
@@ -56,4 +56,4 @@ def test_apply_refuses_stale_chunk_with_trailing_whitespace(tmp_path):
     # The file is UNMODIFIED since the scan.  A correct applier should succeed here.
     # Under the buggy applier the trailing space survives rstrip('\n'), causing a
     # sha mismatch and a spurious StaleChunkError.
-    apply_operations([Operation(kind="delete", ref=ref)], backup_dir=tmp_path / "bk")
+    apply_operations([Operation(kind="delete", ref=ref)], backup_dir=tmp_path / "bk", base_root=tmp_path)
