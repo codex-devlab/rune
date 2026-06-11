@@ -3,7 +3,7 @@ from rune.adapters.base import InjectionAdapter
 from rune.models.source import InjectionSource
 from rune.pipeline.tokenizer import split_into_chunks
 
-_SKIP_DIRS = {".git", ".repo", "node_modules", "__pycache__", ".venv", "venv"}
+_SKIP_DIRS = {".git", ".repo", "node_modules", "__pycache__", ".venv", "venv", ".rune", "dist", "build"}
 _AGENT_MD_NAMES = {"CLAUDE.md", "AGENTS.md", "GEMINI.md", "COPILOT.md"}
 
 
@@ -15,7 +15,7 @@ class GenericAdapter(InjectionAdapter):
         sources: list[InjectionSource] = []
         for md_file in self._walk_md(path):
             text = self._safe_read(md_file)
-            chunks = split_into_chunks(text)
+            chunks = [] if md_file.is_symlink() else split_into_chunks(text)
             sources.append(
                 InjectionSource(
                     path=md_file,
