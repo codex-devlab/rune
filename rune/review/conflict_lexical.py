@@ -40,3 +40,32 @@ def extract_triples(text: str) -> list[tuple[str, str, str]]:
         if vm:
             triples.append((modal, vm.group(1).lower(), vm.group(2).lower()))
     return triples
+
+
+from rune.review.types import ChunkRef, ConflictPair
+
+
+def _is_opposing(m1: str, m2: str) -> bool:
+    return (m1 in POSITIVE_MODALS and m2 in NEGATIVE_MODALS) or \
+           (m2 in POSITIVE_MODALS and m1 in NEGATIVE_MODALS)
+
+
+def find_lexical_conflicts(refs: list[ChunkRef]) -> list[ConflictPair]:
+    indexed: list[tuple[ChunkRef, list[tuple[str, str, str]]]] = [
+        (r, extract_triples(r.text)) for r in refs
+    ]
+    pairs: list[ConflictPair] = []
+    for i in range(len(indexed)):
+        ref_i, triples_i = indexed[i]
+        for j in range(i + 1, len(indexed)):
+            ref_j, triples_j = indexed[j]
+            for m1, v1, o1 in triples_i:
+                for m2, v2, o2 in triples_j:
+                    if v1 == v2 and o1 == o2 and _is_opposing(m1, m2):
+                        pairs.append(ConflictPair(
+                            a=ref_i, b=ref_j,
+                            reason=f"{m1} vs {m2} on {v1} {o1}",
+                            confidence=0.95,
+                            source="lexical",
+                        ))
+    return pairs
