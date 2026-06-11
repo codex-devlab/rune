@@ -1,3 +1,5 @@
+import hashlib
+import shutil
 from pathlib import Path
 
 import typer
@@ -18,3 +20,29 @@ def verify_cmd(manifest: Path = typer.Option(..., "--manifest")):
         if status != "OK":
             exit_code = 1
     raise typer.Exit(exit_code)
+
+
+@patch_app.command("apply")
+def apply_cmd(
+    manifest: Path = typer.Option(..., "--manifest"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+):
+    entries = load_manifest(manifest)
+    for entry in entries:
+        target = Path(entry.target_path)
+        payload = Path(entry.payload_path)
+        if not target.exists():
+            print(f"MISSING: {target}")
+            raise typer.Exit(1)
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual == entry.post_sha256:
+            print(f"SKIP (already applied): {target}")
+            continue
+        if actual != entry.pre_sha256:
+            print(f"DRIFT: {target} expected {entry.pre_sha256} got {actual}")
+            raise typer.Exit(2)
+        if dry_run:
+            print(f"WOULD APPLY: {target}")
+            continue
+        shutil.copy2(payload, target)
+        print(f"APPLIED: {target}")
