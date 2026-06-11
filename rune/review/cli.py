@@ -18,7 +18,27 @@ def main(
     nli_small: bool = typer.Option(False, "--nli-small"),
     events_path: Path = typer.Option(None, "--events-path"),
     events_window_days: int = typer.Option(30, "--events-window-days"),
+    apply: bool = typer.Option(False, "--apply"),
+    yes: bool = typer.Option(False, "--yes"),
+    restore: str = typer.Option(None, "--restore"),
+    keep_backups: int = typer.Option(10, "--keep-backups"),
+    no_prune: bool = typer.Option(False, "--no-prune"),
 ):
+    import sys
+    backup_root = path / ".rune" / "backups"
+    if restore:
+        snap = backup_root / restore
+        if not snap.exists():
+            print(f"snapshot not found: {restore}", file=sys.stderr)
+            raise typer.Exit(2)
+        for f in snap.iterdir():
+            if f.name == "operation_log.json":
+                continue
+            target = path / f.name
+            target.write_bytes(f.read_bytes())
+        print(f"restored from {restore}")
+        return
+
     refs_with_triggers = load_chunk_refs(path)
     refs = [r for r, _ in refs_with_triggers]
     conflicts = find_lexical_conflicts(refs)
@@ -52,6 +72,22 @@ def main(
         conflicts=conflicts,
         dead_candidates=dead,
     )
+    if apply:
+        if not yes:
+            print("refusing to apply without --yes", file=sys.stderr)
+            raise typer.Exit(2)
+        from rune.review.applier import apply_operations, prune_backups, Operation
+        ops: list = []
+        for c in conflicts:
+            ops.append(Operation(kind="delete", ref=c.b))
+        for d in dead:
+            ops.append(Operation(kind="delete", ref=d.chunk))
+        backup_root.mkdir(parents=True, exist_ok=True)
+        log = apply_operations(ops, backup_dir=backup_root)
+        if not no_prune:
+            prune_backups(backup_root, keep=keep_backups)
+        print(f"applied {len(log['ops'])} ops; backup {log['timestamp']}")
+        return
     if json:
         print(jsonlib.dumps(report.to_dict(), indent=2))
         return
