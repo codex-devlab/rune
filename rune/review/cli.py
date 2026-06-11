@@ -26,6 +26,21 @@ def main(
     )
     if json:
         print(jsonlib.dumps(report.to_dict(), indent=2))
-    else:
-        print(f"conflicts: {len(conflicts)}, dead candidates: {len(dead)}")
-        print("(use --json for full report; TUI in Phase 2)")
+        return
+    # Default: launch TUI
+    from rune.review.tui import ReviewApp
+    findings = []
+    for c in conflicts:
+        d = c.to_dict()
+        d["kind"] = "conflict"
+        d["path"] = str(c.a.path)
+        d["mtime_at_scan"] = c.a.path.stat().st_mtime if c.a.path.exists() else 0.0
+        findings.append(d)
+    for dc in dead:
+        d = dc.to_dict()
+        d["kind"] = "dead"
+        d["path"] = str(dc.chunk.path)
+        d["mtime_at_scan"] = dc.chunk.path.stat().st_mtime if dc.chunk.path.exists() else 0.0
+        findings.append(d)
+    app = ReviewApp(findings=findings, watch_files=True)
+    app.run()
