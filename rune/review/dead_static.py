@@ -21,14 +21,14 @@ def _trigger_keywords(text: str) -> list[str]:
     return [k.strip().lower() for k in m.group(1).split(",") if k.strip()]
 
 
-def _repo_has_extension(repo_root: Path, exts: list[str]) -> bool:
-    for ext in exts:
-        if any(True for _ in repo_root.rglob(f"*{ext}")):
-            return True
-    return False
-
-
 def find_dead_rules_static(refs: list[ChunkRef], repo_root: Path) -> list[DeadCandidate]:
+    if not refs:
+        return []
+    # Pre-walk repo ONCE
+    all_files = [p for p in repo_root.rglob("*") if p.is_file()]
+    exts_present: set[str] = {p.suffix for p in all_files}
+    path_strs_lower: list[str] = [str(p).lower() for p in all_files]
+
     dead: list[DeadCandidate] = []
     for ref in refs:
         keywords = _trigger_keywords(ref.text)
@@ -37,10 +37,10 @@ def find_dead_rules_static(refs: list[ChunkRef], repo_root: Path) -> list[DeadCa
         alive = False
         for kw in keywords:
             exts = LANG_TO_EXT.get(kw)
-            if exts and _repo_has_extension(repo_root, exts):
+            if exts and any(ext in exts_present for ext in exts):
                 alive = True
                 break
-            if any(kw in str(p).lower() for p in repo_root.rglob("*") if p.is_file()):
+            if any(kw in s for s in path_strs_lower):
                 alive = True
                 break
         if not alive:

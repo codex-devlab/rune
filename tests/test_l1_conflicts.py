@@ -15,3 +15,12 @@ def test_no_false_positive_on_unrelated():
     refs = [_ref("Always use TypeScript."), _ref("Run tests fast.", path="y.md")]
     pairs = find_lexical_conflicts(refs)
     assert pairs == []
+
+def test_no_duplicate_pairs_on_repeated_triples():
+    """I3: same (verb, object) triple appearing multiple times in same chunk should not emit duplicate pairs"""
+    refs = [
+        _ref("Always use TypeScript. Always use TypeScript."),
+        _ref("Never use TypeScript.", path="y.md"),
+    ]
+    pairs = find_lexical_conflicts(refs)
+    assert len(pairs) == 1, f"expected 1 pair, got {len(pairs)}: {pairs}"

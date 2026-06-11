@@ -55,6 +55,7 @@ def find_lexical_conflicts(refs: list[ChunkRef]) -> list[ConflictPair]:
         (r, extract_triples(r.text)) for r in refs
     ]
     pairs: list[ConflictPair] = []
+    seen: set[tuple[int, int, str, str]] = set()  # (i, j, verb, object)
     for i in range(len(indexed)):
         ref_i, triples_i = indexed[i]
         for j in range(i + 1, len(indexed)):
@@ -62,6 +63,10 @@ def find_lexical_conflicts(refs: list[ChunkRef]) -> list[ConflictPair]:
             for m1, v1, o1 in triples_i:
                 for m2, v2, o2 in triples_j:
                     if v1 == v2 and o1 == o2 and _is_opposing(m1, m2):
+                        key = (i, j, v1, o1)
+                        if key in seen:
+                            continue
+                        seen.add(key)
                         pairs.append(ConflictPair(
                             a=ref_i, b=ref_j,
                             reason=f"{m1} vs {m2} on {v1} {o1}",
