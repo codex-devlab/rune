@@ -11,7 +11,7 @@ review_app = typer.Typer(help="Review rules for conflicts and dead rules")
 
 @review_app.callback(invoke_without_command=True)
 def main(
-    json: bool = typer.Option(False, "--json"),
+    json: bool = typer.Option(False, "--json", help="Emit JSON to stdout. When combined with --apply, stdout emits the same JSON as operation_log.json."),
     path: Path = typer.Argument(Path(".")),
     l2: bool = typer.Option(False, "--l2"),
     allow_model_download: bool = typer.Option(False, "--allow-model-download"),
@@ -23,9 +23,18 @@ def main(
     restore: str = typer.Option(None, "--restore"),
     keep_backups: int = typer.Option(10, "--keep-backups"),
     no_prune: bool = typer.Option(False, "--no-prune"),
+    confirm_delete_heuristics: bool = typer.Option(False, "--confirm-delete-heuristics", help="Acknowledge headless heuristic deletion; required for --apply --yes without --from-report or --select."),
+    from_report: Path = typer.Option(None, "--from-report", help="Load ops from a JSON report file produced by --json."),
+    select: str = typer.Option(None, "--select", help="Comma-separated finding IDs to apply (v0.3+; currently equivalent to --confirm-delete-heuristics)."),
 ):
     import sys
     backup_root = path / ".rune" / "backups"
+
+    # I6: --apply and --restore are mutually exclusive
+    if apply and restore:
+        print("error: --apply and --restore are mutually exclusive", file=sys.stderr)
+        raise typer.Exit(2)
+
     if restore:
         snap = backup_root / restore
         if not snap.exists():
@@ -76,6 +85,28 @@ def main(
         if not yes:
             print("refusing to apply without --yes", file=sys.stderr)
             raise typer.Exit(2)
+
+        # C4: gate --apply --yes behind explicit confirmation
+        import os
+        allow_blind = os.environ.get("RUNE_ALLOW_BLIND_APPLY") == "1"
+        has_explicit_confirm = (
+            confirm_delete_heuristics or
+            from_report is not None or
+            select is not None or
+            allow_blind
+        )
+        if not has_explicit_confirm:
+            print(
+                "error: --apply --yes requires explicit confirmation:\n"
+                "  --confirm-delete-heuristics    (acknowledge headless heuristic deletion)\n"
+                "  --from-report PATH             (apply ops from JSON report)\n"
+                "  --select IDS                   (apply specific finding IDs — v0.3+)\n"
+                "  RUNE_ALLOW_BLIND_APPLY=1       (legacy automation escape)\n"
+                "Refusing to delete content based on heuristics alone.",
+                file=sys.stderr,
+            )
+            raise typer.Exit(2)
+
         from rune.review.applier import apply_operations, prune_backups, Operation
         ops: list = []
         for c in conflicts:
@@ -86,7 +117,12 @@ def main(
         log = apply_operations(ops, backup_dir=backup_root, base_root=path)
         if not no_prune:
             prune_backups(backup_root, keep=keep_backups)
-        print(f"applied {len(log['ops'])} ops; backup {log['timestamp']}")
+
+        # I7: JSON identity contract — stdout JSON is byte-identical to operation_log.json on disk
+        if json:
+            print(jsonlib.dumps(log, indent=2))
+        else:
+            print(f"applied {len(log['ops'])} ops; backup {log['timestamp']}")
         return
     if json:
         print(jsonlib.dumps(report.to_dict(), indent=2))

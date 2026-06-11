@@ -18,7 +18,7 @@ def test_11_apply_sessions_yields_10_snapshots(tmp_path):
     for i in range(11):
         target.write_text(f"# Section A\n\nAlways use X{i}.\n\n# Section B\n\nNever use X{i}.\n")
         result = subprocess.run(
-            ["rune", "review", "--apply", "--yes", str(tmp_path)],
+            ["rune", "review", "--apply", "--yes", "--confirm-delete-heuristics", str(tmp_path)],
             capture_output=True, text=True,
         )
         assert result.returncode == 0, f"iter {i} failed: {result.stderr}"

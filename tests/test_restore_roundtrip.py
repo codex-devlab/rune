@@ -9,7 +9,7 @@ def test_apply_and_restore_roundtrip(tmp_path):
     target.write_text(original)
     # Apply (headless heuristic: delete the b-side of every conflict)
     result = subprocess.run(
-        ["rune", "review", "--apply", "--yes", str(tmp_path)],
+        ["rune", "review", "--apply", "--yes", "--confirm-delete-heuristics", str(tmp_path)],
         capture_output=True, text=True,
     )
     assert result.returncode == 0, f"apply failed: {result.stderr}"
