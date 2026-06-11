@@ -17,14 +17,19 @@ import tomli_w
 
 TARGETS = [
     "cli/main.py",
+    # v0.2 review
     "review/__init__.py", "review/cli.py", "review/types.py", "review/loader.py",
     "review/conflict_lexical.py", "review/conflict_nli.py",
     "review/dead_static.py", "review/dead_events.py",
     "review/applier.py", "review/tui.py",
     "review/schema.json", "review/SCHEMA_POLICY.md",
     "review/L1_LIMITS.md", "review/BENCHMARKS.md",
+    # patch journal
     "cli/patch.py",
     "patches/__init__.py", "patches/manifest.py",
+    # optimize (ported from prior session)
+    "cli/optimize.py", "pipeline/clustering.py",
+    "adapters/generic.py", "adapters/claude_code.py",
 ]
 
 
