@@ -16,11 +16,19 @@ def main(
     l2: bool = typer.Option(False, "--l2"),
     allow_model_download: bool = typer.Option(False, "--allow-model-download"),
     nli_small: bool = typer.Option(False, "--nli-small"),
+    events_path: Path = typer.Option(None, "--events-path"),
+    events_window_days: int = typer.Option(30, "--events-window-days"),
 ):
     refs_with_triggers = load_chunk_refs(path)
     refs = [r for r, _ in refs_with_triggers]
     conflicts = find_lexical_conflicts(refs)
     dead = find_dead_rules_static(refs, repo_root=path)
+
+    if events_path is not None:
+        from rune.review.dead_events import find_dead_rules_events
+        events_dead = find_dead_rules_events(refs, events_path=events_path, window_days=events_window_days)
+        # Merge: add Stage B candidates to existing dead list
+        dead = dead + events_dead
 
     if l2:
         from rune.review.conflict_nli import find_nli_conflicts, DEFAULT_MODEL, SMALL_MODEL
