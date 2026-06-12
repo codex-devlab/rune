@@ -5,6 +5,7 @@ mirror this transform (`.strip()`). Partial normalization (e.g., `.rstrip("\\n")
 a bug — it produces SHA mismatches on chunks with trailing whitespace or CRLF endings.
 """
 import hashlib
+import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -45,36 +46,63 @@ def apply_operations(ops: list[Operation], backup_dir: Path, base_root: Path) ->
     by_file: dict[Path, list[Operation]] = {}
     for op in ops:
         by_file.setdefault(op.ref.path, []).append(op)
-    for path, file_ops in by_file.items():
-        lines = path.read_text().splitlines(keepends=True)  # ONCE per file (I4)
-        # I5: bounds check — validate every op's range before touching anything
-        for op in file_ops:
-            if not (1 <= op.ref.start_line <= op.ref.end_line <= len(lines)):
-                raise ValueError(
-                    f"chunk line range {op.ref.start_line}-{op.ref.end_line} out of bounds "
-                    f"for {path} (file has {len(lines)} lines)"
-                )
-        # C1: Verify staleness using producer-canonical .strip()
-        for op in file_ops:
-            current = _read_chunk_from_lines(lines, op.ref.start_line, op.ref.end_line).strip()
-            current_sha = hashlib.sha256(current.encode("utf-8")).hexdigest()
-            if current_sha != op.ref.sha256:
-                raise StaleChunkError(f"file changed since scan: {path}")
-        # C3: backup preserving relative path
-        _backup_file(path, snapshot_root, base_root=base_root)
-        # Apply in reverse line order (same lines list — I4)
-        file_ops.sort(key=lambda o: o.ref.start_line, reverse=True)
-        for op in file_ops:
-            if op.kind == "delete":
-                del lines[op.ref.start_line - 1:op.ref.end_line]
-            elif op.kind == "comment":
-                for i in range(op.ref.start_line - 1, op.ref.end_line):
-                    lines[i] = "<!-- " + lines[i].rstrip("\n") + " -->\n"
-            log["ops"].append({
-                "file": str(path), "kind": op.kind,
-                "start_line": op.ref.start_line, "end_line": op.ref.end_line,
-            })
-        path.write_text("".join(lines))
+
+    # Phase 1: PREPARE — read, verify, apply edits in memory, write tmp files, fsync.
+    # No observable state change to target files yet.
+    prepared: list[tuple[Path, Path, list[str]]] = []  # (target, tmp, edited_lines)
+    try:
+        for path, file_ops in by_file.items():
+            lines = path.read_text().splitlines(keepends=True)  # ONCE per file (I4)
+            # I5: bounds check — validate every op's range before touching anything
+            for op in file_ops:
+                if not (1 <= op.ref.start_line <= op.ref.end_line <= len(lines)):
+                    raise ValueError(
+                        f"chunk line range {op.ref.start_line}-{op.ref.end_line} out of bounds "
+                        f"for {path} (file has {len(lines)} lines)"
+                    )
+            # C1: Verify staleness using producer-canonical .strip()
+            for op in file_ops:
+                current = _read_chunk_from_lines(lines, op.ref.start_line, op.ref.end_line).strip()
+                current_sha = hashlib.sha256(current.encode("utf-8")).hexdigest()
+                if current_sha != op.ref.sha256:
+                    raise StaleChunkError(f"file changed since scan: {path}")
+            # C3: backup preserving relative path — done during prepare so snapshot
+            # exists even if the commit phase crashes
+            _backup_file(path, snapshot_root, base_root=base_root)
+            # Apply in reverse line order (same lines list — I4)
+            file_ops.sort(key=lambda o: o.ref.start_line, reverse=True)
+            for op in file_ops:
+                if op.kind == "delete":
+                    del lines[op.ref.start_line - 1:op.ref.end_line]
+                elif op.kind == "comment":
+                    for i in range(op.ref.start_line - 1, op.ref.end_line):
+                        lines[i] = "<!-- " + lines[i].rstrip("\n") + " -->\n"
+                log["ops"].append({
+                    "file": str(path), "kind": op.kind,
+                    "start_line": op.ref.start_line, "end_line": op.ref.end_line,
+                })
+            # Write tmp file with edited content; fsync to commit to disk
+            tmp = path.with_suffix(path.suffix + ".rune-apply-tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write("".join(lines))
+                f.flush()
+                os.fsync(f.fileno())
+            prepared.append((path, tmp, lines))
+    except Exception:
+        # Cleanup any tmp files written so far before re-raising
+        for _, tmp, _ in prepared:
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
+        raise
+
+    # Phase 2: COMMIT — atomic os.replace per file (POSIX-atomic within same filesystem).
+    # If a rename fails mid-loop, the operation log records what was planned;
+    # --restore can recover from the backup snapshot.
+    for target, tmp, _ in sorted(prepared, key=lambda t: str(t[0])):
+        os.replace(tmp, target)
+
     import json as _json
     (snapshot_root / "operation_log.json").write_text(_json.dumps(log, indent=2))
     return log
