@@ -16,7 +16,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    "tomli_w>=1.0",
+    "jsonschema>=4.0",
+    "pytest-asyncio>=0.23",
+]
 
 [project.scripts]
 rune = "rune.cli.main:app"
