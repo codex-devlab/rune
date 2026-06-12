@@ -19,19 +19,34 @@ applied_at_iso = "2026-06-11T00:00:00Z"
     assert entries[0].target_path == "rune/cli/main.py"
     assert entries[0].pre_sha256 == "abc"
 
-def test_verify_entry_ok(tmp_path):
+def test_verify_entry_pending(tmp_path):
     target = tmp_path / "target.py"
     target.write_text("hello")
     sha = hashlib.sha256(b"hello").hexdigest()
     entry = PatchEntry(
         target_path=str(target),
         pre_sha256=sha,
-        post_sha256="xxx",
+        post_sha256="x" * 64,
         payload_path="",
         description="",
         applied_at_iso="",
     )
-    assert verify_entry(entry, base_dir=tmp_path) == "OK"
+    assert verify_entry(entry, base_dir=tmp_path) == "PENDING"
+
+
+def test_verify_entry_applied(tmp_path):
+    target = tmp_path / "target.py"
+    target.write_text("hello")
+    sha = hashlib.sha256(b"hello").hexdigest()
+    entry = PatchEntry(
+        target_path=str(target),
+        pre_sha256="a" * 64,
+        post_sha256=sha,
+        payload_path="",
+        description="",
+        applied_at_iso="",
+    )
+    assert verify_entry(entry, base_dir=tmp_path) == "APPLIED"
 
 def test_verify_entry_drift(tmp_path):
     target = tmp_path / "target.py"

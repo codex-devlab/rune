@@ -17,7 +17,7 @@ def verify_cmd(manifest: Path = typer.Option(..., "--manifest")):
     for entry in entries:
         status = verify_entry(entry, base_dir=base_dir)
         print(f"{entry.target_path}: {status}")
-        if status != "OK":
+        if status not in ("APPLIED", "PENDING"):
             exit_code = 1
     raise typer.Exit(exit_code)
 

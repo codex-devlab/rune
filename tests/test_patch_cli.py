@@ -24,7 +24,29 @@ applied_at_iso = ""
         capture_output=True, text=True,
     )
     assert result.returncode == 0
-    assert "OK" in result.stdout
+    assert "PENDING" in result.stdout or "APPLIED" in result.stdout
+
+
+def test_patch_verify_reports_applied(tmp_path):
+    target = tmp_path / "f.py"
+    target.write_text("x")
+    sha = hashlib.sha256(b"x").hexdigest()
+    manifest = tmp_path / "m.toml"
+    manifest.write_text(f"""
+[[patch]]
+target_path = "{target}"
+pre_sha256 = "aaa"
+post_sha256 = "{sha}"
+payload_path = ""
+description = ""
+applied_at_iso = ""
+""")
+    result = subprocess.run(
+        ["rune", "patch", "verify", "--manifest", str(manifest)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "APPLIED" in result.stdout
 
 
 def test_patch_apply_writes_payload(tmp_path):
