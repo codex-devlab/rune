@@ -43,6 +43,8 @@ def verify_entry(entry: PatchEntry, base_dir: Path) -> str:
     if not target.exists():
         return "MISSING"
     actual = _file_sha256(target)
-    if actual == entry.pre_sha256 or actual == entry.post_sha256:
-        return "OK"
+    if actual == entry.post_sha256:
+        return "APPLIED"
+    if actual == entry.pre_sha256:
+        return "PENDING"
     return f"DRIFT (expected {entry.pre_sha256} or {entry.post_sha256}, got {actual})"

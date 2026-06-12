@@ -15,22 +15,28 @@ from pathlib import Path
 import tomli_w
 
 
-TARGETS = [
-    "cli/main.py",
-    # v0.2 review
-    "review/__init__.py", "review/cli.py", "review/types.py", "review/loader.py",
-    "review/conflict_lexical.py", "review/conflict_nli.py",
-    "review/dead_static.py", "review/dead_events.py",
-    "review/applier.py", "review/tui.py",
-    "review/schema.json", "review/SCHEMA_POLICY.md",
-    "review/L1_LIMITS.md", "review/BENCHMARKS.md",
-    # patch journal
-    "cli/patch.py",
-    "patches/__init__.py", "patches/manifest.py",
-    # optimize (ported from prior session)
-    "cli/optimize.py", "pipeline/clustering.py",
-    "adapters/generic.py", "adapters/claude_code.py",
-]
+def discover_targets(dev_root: Path) -> list[str]:
+    """Auto-discover deployable files.
+
+    Includes all of rune/review/* and rune/patches/* (whole modules added by v0.2).
+    Plus surgical-edit files explicitly listed (cli/*, adapters/*, pipeline/clustering.py).
+    """
+    surgical = [
+        "cli/main.py", "cli/patch.py", "cli/optimize.py",
+        "pipeline/clustering.py",
+        "adapters/generic.py", "adapters/claude_code.py",
+    ]
+    targets: list[str] = list(surgical)
+
+    for module_dir in ("review", "patches"):
+        for p in sorted((dev_root / module_dir).rglob("*")):
+            if p.is_file() and p.suffix in {".py", ".json", ".md"}:
+                if "__pycache__" in p.parts:
+                    continue
+                if "payloads" in p.parts:  # generated artifacts
+                    continue
+                targets.append(str(p.relative_to(dev_root)))
+    return targets
 
 
 def sha256(p: Path) -> str:
@@ -52,8 +58,9 @@ def main():
 
     args.payload_dir.mkdir(parents=True, exist_ok=True)
 
+    targets = discover_targets(args.dev_root)
     entries = []
-    for rel in TARGETS:
+    for rel in targets:
         target = args.target_root / rel
         dev = args.dev_root / rel
         if not dev.exists():
