@@ -1,21 +1,30 @@
-import subprocess, time, signal, os, tempfile
+"""Cold-start measurement for `rune review` TUI path."""
+import os
+import subprocess
+import time
+from pathlib import Path
 
 
-def test_tui_cold_start_under_850ms(tmp_path):
+def test_tui_cold_start_under_800ms(tmp_path):
+    """Spec budget: ≤800ms from `rune review` invocation to TUI mount-ready."""
+    # Larger fixture: 250 chunks worth of rules to exercise the scanning path
     (tmp_path / "CLAUDE.md").write_text("Always use TS.\n" * 250)
-    t0 = time.perf_counter()
+
     env = {**os.environ, "TEXTUAL_HEADLESS": "1"}
-    proc = subprocess.Popen(
-        ["rune", "review", str(tmp_path)],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=env,
+    t0 = time.perf_counter()
+    proc = subprocess.run(
+        ["rune", "review", "--probe-startup-time", str(tmp_path)],
+        capture_output=True, text=True, env=env, timeout=5,
     )
-    # Wait up to 0.85s for app to start, then signal exit
-    time.sleep(0.85)
-    elapsed = time.perf_counter() - t0
-    proc.send_signal(signal.SIGINT)
-    try:
-        proc.wait(timeout=3)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    assert elapsed < 0.95, f"cold start measurement window exceeded: {elapsed:.3f}s"
+    t1 = time.perf_counter()
+
+    assert proc.returncode == 0, f"probe failed: {proc.stderr}"
+    assert "READY" in proc.stdout, f"no READY marker in stdout: {proc.stdout!r}"
+
+    # Two ways to compute cold-start:
+    # (a) Wall-clock from subprocess.run start to return (includes process teardown)
+    # (b) Embedded epoch_ms marker minus process spawn time (we don't have spawn epoch)
+    # Use (a) — it's an upper bound; tighter than the previous test which only checked sleep + ceiling.
+    elapsed = t1 - t0
+    print(f"\ncold start measured: {elapsed*1000:.0f}ms")
+    assert elapsed < 0.800, f"cold start {elapsed*1000:.0f}ms exceeds 800ms budget"

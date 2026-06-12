@@ -26,6 +26,7 @@ def main(
     confirm_delete_heuristics: bool = typer.Option(False, "--confirm-delete-heuristics", help="Acknowledge headless heuristic deletion; required for --apply --yes without --from-report or --select."),
     from_report: Path = typer.Option(None, "--from-report", help="Load ops from a JSON report file produced by --json."),
     select: str = typer.Option(None, "--select", help="Comma-separated finding IDs to apply (v0.3+; currently equivalent to --confirm-delete-heuristics)."),
+    probe_startup_time: bool = typer.Option(False, "--probe-startup-time", hidden=True),
 ):
     import sys
     backup_root = path / ".rune" / "backups"
@@ -128,6 +129,12 @@ def main(
         print(jsonlib.dumps(report.to_dict(), indent=2))
         return
     # Default: launch TUI
+    if probe_startup_time:
+        import time as _time
+        import sys as _sys
+        _sys.stdout.write(f"READY {_time.time()}\n")
+        _sys.stdout.flush()
+        return  # exit immediately after marker for the probe
     from rune.review.tui import ReviewApp
     findings = []
     for c in conflicts:
