@@ -6,8 +6,9 @@ from rich.table import Table
 
 from rune.pipeline.inventory import run_inventory
 from rune.pipeline.scorer import score_chunks_structural, score_chunks_tfidf
-from rune.pipeline.dedup import find_dedup_pairs
+from rune.pipeline.dedup import find_dedup_pairs, find_dedup_chunk_pairs
 from rune.pipeline.trigger import extract_triggers
+from rune.cli.optimize import has_optimization_targets, recommended_optimize_command
 from rune.models.report import AnalysisReport
 
 console = Console()
@@ -36,15 +37,22 @@ def analyze_cmd(
     score_chunks_structural(all_chunks)
     score_chunks_tfidf(all_chunks)
 
-    # Dedup
+    # Dedup — 파일단위 비교는 유지하되, 청크(규칙) 단위 비교를 주(主) 신호로 쓴다.
     pairs = [] if no_semantic else find_dedup_pairs(sources)
+    chunk_pairs = [] if no_semantic else find_dedup_chunk_pairs(sources)
     high_pairs = [p for p in pairs if p.confidence == "HIGH"]
+    high_chunk_pairs = [p for p in chunk_pairs if p.confidence == "HIGH"]
 
     # Trigger
     trigger_results = extract_triggers(sources)
 
     total_tokens = sum(s.token_count for s in sources)
     level = _determine_level(sources)
+
+    # optimize 가 실제로 처리할 대상이 있을 때만 추천한다(추천-결과 정합).
+    recommend_optimize = has_optimization_targets(sources)
+    # 신호 종류에 맞춰 실제 절약을 내는 정확한 명령을 안내한다.
+    optimize_command = recommended_optimize_command(sources)
 
     report = AnalysisReport(
         total_tokens=total_tokens,
@@ -61,6 +69,9 @@ def analyze_cmd(
             "platform": platform.value,
             "source_count": len(sources),
             "dedup_high": len(high_pairs),
+            "dedup_chunk_high": len(high_chunk_pairs),
+            "recommend_optimize": recommend_optimize,
+            "optimize_command": optimize_command,
             "sources": [
                 {"path": str(s.path), "type": s.source_type, "tokens": s.token_count}
                 for s in sources
@@ -68,7 +79,7 @@ def analyze_cmd(
         }))
         return
 
-    _render_report(report, platform.value, target)
+    _render_report(report, platform.value, target, high_chunk_pairs, recommend_optimize, optimize_command)
 
 
 def _determine_level(sources) -> int:
@@ -83,7 +94,15 @@ def _determine_level(sources) -> int:
     return 1
 
 
-def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
+def _render_report(
+    report: AnalysisReport,
+    platform: str,
+    target: Path,
+    high_chunk_pairs: list | None = None,
+    recommend_optimize: bool = False,
+    optimize_command: str | None = None,
+) -> None:
+    high_chunk_pairs = high_chunk_pairs or []
     console.print(f"\n[bold]rune analyze[/bold] — {target}")
     console.print(f"Platform: [cyan]{platform}[/cyan]\n")
 
@@ -104,7 +123,7 @@ def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
 
     high_pairs = [p for p in report.dedup_pairs if p.confidence == "HIGH"]
     if high_pairs:
-        console.print(f"[red]중복 탐지[/red]: {len(high_pairs)}쌍 (HIGH confidence)")
+        console.print(f"[red]파일 단위 중복[/red]: {len(high_pairs)}쌍 (HIGH confidence)")
         for p in high_pairs[:10]:
             try:
                 a = p.source_a.relative_to(target)
@@ -115,7 +134,24 @@ def _render_report(report: AnalysisReport, platform: str, target: Path) -> None:
         if len(high_pairs) > 10:
             console.print(f"  ... 외 {len(high_pairs) - 10}쌍")
 
-    if report.level <= 1:
-        console.print("\n[green]최적화 불필요[/green] — 설정이 적정합니다.")
+    # 청크(규칙) 단위 중복 — 파일이 통째로 같지 않아도 같은 규칙이 여러 곳에
+    # 들어있으면 여기서 보고한다(주 신호).
+    if high_chunk_pairs:
+        console.print(f"[red]규칙 단위 중복[/red]: {len(high_chunk_pairs)}쌍 (HIGH confidence)")
+        for p in high_chunk_pairs[:10]:
+            try:
+                a = p.source_a.relative_to(target)
+                b = p.source_b.relative_to(target)
+            except ValueError:
+                a, b = p.source_a, p.source_b
+            preview = p.text_a.strip().splitlines()[0][:48] if p.text_a.strip() else ""
+            console.print(f"  - \"{preview}\": {a} ↔ {b} ({p.similarity:.2%})")
+        if len(high_chunk_pairs) > 10:
+            console.print(f"  ... 외 {len(high_chunk_pairs) - 10}쌍")
+
+    # 추천은 optimize 가 실제로 처리할 대상이 있을 때만(추천-결과 정합).
+    # 신호 종류에 맞춰 실제 절약을 내는 정확한 명령을 안내한다.
+    if recommend_optimize and optimize_command:
+        console.print(f"\n추천: [bold]{optimize_command}[/bold] 으로 최적화 미리보기")
     else:
-        console.print("\n추천: [bold]rune optimize --dry-run[/bold] 으로 최적화 미리보기")
+        console.print("\n[green]최적화 불필요[/green] — 중복이 없습니다.")

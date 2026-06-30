@@ -20,6 +20,27 @@ POS_PATTERNS = [
 
 VERB_OBJ = re.compile(r"\b(use|run|deploy|write|validate|prefer|avoid|enable|disable)\s+([\w\-]+)", re.I)
 
+# 상충 object 사전: 같은 슬롯에 대한 상반된 값.
+# 보수적으로 잘 알려진 이항 대립쌍만 등록한다(과탐 방지).
+# 각 항목은 정규화된(소문자) object 토큰 쌍.
+OPPOSING_OBJECTS: list[frozenset[str]] = [
+    frozenset({"spaces", "tabs"}),
+    frozenset({"tab", "space"}),
+    frozenset({"single", "double"}),
+    frozenset({"camelcase", "snake_case"}),
+    frozenset({"camelcase", "snakecase"}),
+    frozenset({"https", "http"}),
+    frozenset({"yarn", "npm"}),
+    frozenset({"lf", "crlf"}),
+]
+
+
+def _opposing_objects(o1: str, o2: str) -> bool:
+    if o1 == o2:
+        return False
+    pair = frozenset({o1, o2})
+    return pair in OPPOSING_OBJECTS
+
 
 def extract_triples(text: str) -> list[tuple[str, str, str]]:
     """Return list of (modal, verb, object). Modal is canonical lowercase token."""
@@ -50,16 +71,53 @@ def _is_opposing(m1: str, m2: str) -> bool:
            (m2 in POSITIVE_MODALS and m1 in NEGATIVE_MODALS)
 
 
+def extract_verb_objects(text: str) -> list[tuple[str, str]]:
+    """모달 유무와 무관하게 (verb, object) 쌍을 모두 추출한다.
+
+    '같은 verb + 상충 object'(예: use spaces vs use tabs)처럼 모달 없이도
+    드러나는 충돌을 잡기 위한 보조 추출기.
+    """
+    return [(m.group(1).lower(), m.group(2).lower()) for m in VERB_OBJ.finditer(text)]
+
+
+# 콜론 앞뒤 공백은 수평 공백([^\S\n])만 허용한다. \s* 를 쓰면 개행까지 삼켜
+# 빈 'Trigger:' 줄에서 (.+) 가 다음 본문 줄을 스코프로 오인 캡처한다(false-negative).
+_TRIGGER_RE = re.compile(r"(?im)^[^\S\n]*trigger:[^\S\n]*(.+)$")
+
+
+def _trigger_scope(text: str) -> frozenset[str]:
+    """청크의 Trigger 키워드 집합(소문자)을 반환. 없으면 빈 집합."""
+    m = _TRIGGER_RE.search(text)
+    if not m:
+        return frozenset()
+    return frozenset(k.strip().lower() for k in m.group(1).split(",") if k.strip())
+
+
+def _different_scope(text_a: str, text_b: str) -> bool:
+    """두 청크가 명백히 다른 스코프인지(서로 다른 Trigger, 교집합 없음) 판정.
+
+    둘 다 Trigger 를 가지면서 키워드 교집합이 전혀 없으면 다른 스코프로 본다.
+    한쪽이라도 Trigger 가 없으면(스코프 미상) 보수적으로 '다르지 않다'로 판단해
+    기존 탐지를 깨지 않는다.
+    """
+    sa, sb = _trigger_scope(text_a), _trigger_scope(text_b)
+    if not sa or not sb:
+        return False
+    return sa.isdisjoint(sb)
+
+
 def find_lexical_conflicts(refs: list[ChunkRef]) -> list[ConflictPair]:
-    indexed: list[tuple[ChunkRef, list[tuple[str, str, str]]]] = [
-        (r, extract_triples(r.text)) for r in refs
+    indexed: list[tuple[ChunkRef, list[tuple[str, str, str]], list[tuple[str, str]]]] = [
+        (r, extract_triples(r.text), extract_verb_objects(r.text)) for r in refs
     ]
     pairs: list[ConflictPair] = []
     seen: set[tuple[int, int, str, str]] = set()  # (i, j, verb, object)
+    seen_obj: set[tuple[int, int, str, str, str]] = set()  # (i, j, verb, o1, o2)
     for i in range(len(indexed)):
-        ref_i, triples_i = indexed[i]
+        ref_i, triples_i, vobj_i = indexed[i]
         for j in range(i + 1, len(indexed)):
-            ref_j, triples_j = indexed[j]
+            ref_j, triples_j, vobj_j = indexed[j]
+            # 기존 규칙: 같은 verb+object 에 대한 상반 모달(always vs never 등)
             for m1, v1, o1 in triples_i:
                 for m2, v2, o2 in triples_j:
                     if v1 == v2 and o1 == o2 and _is_opposing(m1, m2):
@@ -71,6 +129,29 @@ def find_lexical_conflicts(refs: list[ChunkRef]) -> list[ConflictPair]:
                             a=ref_i, b=ref_j,
                             reason=f"{m1} vs {m2} on {v1} {o1}",
                             confidence=0.95,
+                            source="lexical",
+                        ))
+            # 확장 규칙: 같은 verb + 상충 object (모달 불필요).
+            # 보수적 사전(OPPOSING_OBJECTS)에 등록된 대립쌍만 인정하고,
+            # 확신이 낮으므로 confidence 를 낮춰 표기한다.
+            # 보수적 scope-awareness: 두 청크가 명백히 다른 스코프(서로 다른 Trigger,
+            # 교집합 없음)면 저신뢰 휴리스틱 충돌은 오탐일 가능성이 높으므로 제외한다.
+            # 모달 기반(always/never) 정탐 경로는 위에서 이미 처리되어 영향받지 않는다.
+            scope_differs = _different_scope(ref_i.text, ref_j.text)
+            for v1, o1 in vobj_i:
+                for v2, o2 in vobj_j:
+                    if v1 == v2 and _opposing_objects(o1, o2):
+                        if scope_differs:
+                            continue
+                        lo, hi = sorted((o1, o2))
+                        key = (i, j, v1, lo, hi)
+                        if key in seen_obj:
+                            continue
+                        seen_obj.add(key)
+                        pairs.append(ConflictPair(
+                            a=ref_i, b=ref_j,
+                            reason=f"conflicting object on {v1}: {o1} vs {o2}",
+                            confidence=0.6,
                             source="lexical",
                         ))
     return pairs

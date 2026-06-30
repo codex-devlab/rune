@@ -45,8 +45,22 @@ def score_chunks_tfidf(chunks: list[Chunk]) -> None:
         texts = [c.text for c in chunks]
         vectorizer = TfidfVectorizer(max_features=500, stop_words=None)
         matrix = vectorizer.fit_transform(texts)
-        # Mean TF-IDF score per chunk = proxy for information density
-        scores = np.asarray(matrix.mean(axis=1)).flatten()
+        # 정보 밀도 프록시: '0이 아닌 항만의 평균' TF-IDF.
+        # 기존 matrix.mean(axis=1)은 등장하지 않은 모든 항(0)까지 분모에 넣어,
+        # 청크가 길거나 어휘가 다양할수록 평균이 부당하게 작아지는 결함이 있었다.
+        # 실제로 등장한 항만 평균하면 길이/어휘 수에 휘둘리지 않고
+        # "등장한 용어들의 평균 변별력"을 측정하므로 통계적으로 타당하다.
+        dense = np.asarray(matrix.todense())
+        nnz = np.count_nonzero(dense, axis=1)
+        row_sum = dense.sum(axis=1)
+        # 0으로 나누기 방지: 항이 하나도 없는 행은 밀도 0.
+        scores = np.divide(
+            row_sum,
+            nnz,
+            out=np.zeros_like(row_sum, dtype=float),
+            where=nnz > 0,
+        )
+        # importance_score 누적 계약 유지: structural 점수에 더한다.
         for chunk, score in zip(chunks, scores):
             chunk.importance_score += float(score)
     except ImportError:

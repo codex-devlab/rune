@@ -6,7 +6,20 @@ from rune.review.conflict_lexical import find_lexical_conflicts
 from rune.review.dead_static import find_dead_rules_static
 from rune.review.types import ReviewReport
 
-review_app = typer.Typer(help="Review rules for conflicts and dead rules")
+# allow_interspersed_args: positional path 와 옵션의 순서를 자유롭게 허용.
+# (예: `rune review . --json` 과 `rune review --json .` 둘 다 동작)
+review_app = typer.Typer(
+    help="Review rules for conflicts and dead rules",
+    context_settings={"allow_interspersed_args": True},
+)
+
+# --apply 자동 삭제 게이트 임계값.
+# 근거: 모달 기반(always vs never 등) 충돌은 confidence=0.95 로 정탐 신뢰도가 높다.
+# 반면 모달 없는 어휘 휴리스틱(같은 verb + 상충 object, 예: use spaces vs use tabs)은
+# confidence=0.6 으로 오탐 가능성이 있어, 잘못 자동 삭제하면 유효 규칙(c.b)이 사라진다.
+# 따라서 0.95 정탐만 통과시키고 0.6 미만(0.6 포함)은 자동 삭제에서 제외한다.
+# 임계값 0.9 는 0.95(통과)와 0.6(차단) 사이에서 모달 기반 정탐만 허용하도록 설정.
+APPLY_CONFLICT_CONFIDENCE_THRESHOLD = 0.9
 
 
 @review_app.callback(invoke_without_command=True)
@@ -61,11 +74,16 @@ def main(
         dead = dead + events_dead
 
     if l2:
-        from rune.review.conflict_nli import find_nli_conflicts, DEFAULT_MODEL, SMALL_MODEL
+        from rune.review.conflict_nli import (
+            find_nli_conflicts,
+            build_l2_candidates,
+            DEFAULT_MODEL,
+            SMALL_MODEL,
+        )
         model = SMALL_MODEL if nli_small else DEFAULT_MODEL
-        # Candidate pairs = chunk pairs that L1 already identified (lexically adjacent)
-        # For v0.2 we re-use the L1 conflict ref pairs as the candidate set.
-        candidates = [(c.a, c.b) for c in conflicts]
+        # 후보군은 L1 결과가 아니라 전체 청크 쌍에 대한 경량 사전필터로 생성한다.
+        # 이렇게 하면 L1 이 0건이어도 L2 가 새 의미 충돌을 찾을 수 있다.
+        candidates = build_l2_candidates(refs)
         nli_pairs = find_nli_conflicts(
             candidates, model_name=model, allow_download=allow_model_download
         )
@@ -110,10 +128,25 @@ def main(
 
         from rune.review.applier import apply_operations, prune_backups, Operation
         ops: list = []
+        # per-finding confidence 게이트: HIGH-confidence(모달 기반) 충돌만 자동 삭제.
+        # 저신뢰(휴리스틱) 충돌은 오탐 시 유효 규칙(c.b)을 삭제할 위험이 있어 제외하고
+        # report-only 로 남긴다. --select 미구현이므로 저신뢰는 일괄 승인으로도 삭제 금지.
+        low_confidence_skipped = 0
         for c in conflicts:
-            ops.append(Operation(kind="delete", ref=c.b))
+            if c.confidence >= APPLY_CONFLICT_CONFIDENCE_THRESHOLD:
+                ops.append(Operation(kind="delete", ref=c.b))
+            else:
+                low_confidence_skipped += 1
+        # dead_candidates 는 정적 trigger 기반이라 비교적 안전하나, 과삭제 방지를 위해
+        # 충돌 게이트와 일관된 보수성을 유지한다(현재 static/events 단계 모두 자동 삭제 후보).
         for d in dead:
             ops.append(Operation(kind="delete", ref=d.chunk))
+        if low_confidence_skipped:
+            print(
+                f"저신뢰 충돌 {low_confidence_skipped}건은 안전상 자동 삭제에서 제외됨 "
+                f"(confidence < {APPLY_CONFLICT_CONFIDENCE_THRESHOLD}; report-only).",
+                file=sys.stderr,
+            )
         backup_root.mkdir(parents=True, exist_ok=True)
         log = apply_operations(ops, backup_dir=backup_root, base_root=path)
         if not no_prune:
@@ -135,7 +168,6 @@ def main(
         _sys.stdout.write(f"READY {_time.time()}\n")
         _sys.stdout.flush()
         return  # exit immediately after marker for the probe
-    from rune.review.tui import ReviewApp
     findings = []
     for c in conflicts:
         d = c.to_dict()
@@ -149,5 +181,27 @@ def main(
         d["path"] = str(dc.chunk.path)
         d["mtime_at_scan"] = dc.chunk.path.stat().st_mtime if dc.chunk.path.exists() else 0.0
         findings.append(d)
+
+    # textual 미설치 시 TUI 대신 텍스트 리포트로 graceful fallback (크래시 금지).
+    try:
+        from rune.review.tui import ReviewApp
+    except ImportError:
+        _print_text_report(conflicts, dead)
+        return
     app = ReviewApp(findings=findings, watch_files=True)
     app.run()
+
+
+def _print_text_report(conflicts: list, dead: list) -> None:
+    """TUI 를 못 쓸 때(textual 미설치) 콘솔에 충돌/데드 후보 목록을 출력한다."""
+    print(f"충돌(conflicts): {len(conflicts)}건")
+    for c in conflicts:
+        print(
+            f"  - [{c.source}] {c.a.path}:{c.a.start_line} <-> "
+            f"{c.b.path}:{c.b.start_line}  ({c.reason}, confidence={c.confidence:.2f})"
+        )
+    print(f"데드 후보(dead candidates): {len(dead)}건")
+    for d in dead:
+        print(f"  - [{d.stage}] {d.chunk.path}:{d.chunk.start_line}  ({d.reason})")
+    print()
+    print("TUI를 쓰려면 pip install textual (또는 pip install 'rune[tui]')")

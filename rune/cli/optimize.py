@@ -10,12 +10,57 @@ from rich.console import Console
 from rich.table import Table
 
 from rune.pipeline.inventory import run_inventory
-from rune.pipeline.dedup import find_dedup_pairs
+from rune.pipeline.dedup import find_dedup_pairs, find_dedup_chunk_pairs
 from rune.pipeline.clustering import cluster_pairs
 from rune.pipeline.tokenizer import count_tokens
 from rune.models.source import InjectionSource
 
 console = Console()
+
+
+def find_optimization_targets(
+    sources: list[InjectionSource],
+) -> tuple[list[list[InjectionSource]], list]:
+    """optimize 가 실제로 처리할 대상을 반환한다.
+
+    analyze 의 추천 조건과 optimize 의 실제 동작 조건을 정합화하기 위한
+    단일 진실 공급원(single source of truth). 반환값:
+      - exact_groups: 내용이 완전히 동일한 파일 그룹(심링크 병합 대상)
+      - chunk_pairs: HIGH confidence 청크(규칙) 단위 중복 쌍
+
+    둘 중 하나라도 비어있지 않으면 optimize 가 실제로 줄일 거리가 있다는 뜻.
+    """
+    exact_groups = _group_exact(sources)
+    chunk_pairs = [
+        p for p in find_dedup_chunk_pairs(sources) if p.confidence == "HIGH"
+    ]
+    return exact_groups, chunk_pairs
+
+
+def has_optimization_targets(sources: list[InjectionSource]) -> bool:
+    """analyze 가 optimize 추천 여부를 판단할 때 사용한다."""
+    exact_groups, chunk_pairs = find_optimization_targets(sources)
+    return bool(exact_groups) or bool(chunk_pairs)
+
+
+def recommended_optimize_command(sources: list[InjectionSource]) -> str | None:
+    """analyze 가 사용자에게 안내할 정확한 optimize 명령을 반환한다.
+
+    추천-결과 정합의 단일 진실 공급원. 신호 종류에 따라 실제로 절약을 내는
+    명령을 정확히 안내한다:
+      - 완전 동일 파일 그룹이 있으면 기본 level 1 이 심링크로 병합한다 →
+        'rune optimize --dry-run'
+      - 청크(규칙) 단위 중복만 주 신호이면 level 1 은 병합하지 못하므로
+        level 3 을 추천 → 'rune optimize --level 3 --dry-run'
+
+    줄일 대상이 없으면 None.
+    """
+    exact_groups, chunk_pairs = find_optimization_targets(sources)
+    if exact_groups:
+        return "rune optimize --dry-run"
+    if chunk_pairs:
+        return "rune optimize --level 3 --dry-run"
+    return None
 
 
 def _sha256(path: Path) -> str:
@@ -161,7 +206,13 @@ def optimize_cmd(
     else:
         groups = _group_semantic(sources, threshold_eff)
 
-    if not groups and level < 3:
+    # 청크(규칙) 단위 HIGH 중복 — 파일 전체가 같지 않아도 같은 규칙이 여러 파일에
+    # 들어있으면 잡는다. analyze 의 추천 조건과 정합화하기 위해 항상 탐지한다.
+    chunk_pairs = [
+        p for p in find_dedup_chunk_pairs(sources) if p.confidence == "HIGH"
+    ]
+
+    if not groups and not chunk_pairs and level < 3:
         console.print(f"[green]최적화 대상 없음[/green] (level {level}, threshold {threshold_eff:.2f})")
         return
 
@@ -191,6 +242,32 @@ def optimize_cmd(
     if actions:
         console.print(table)
 
+    # 청크(규칙) 단위 중복 표시. 같은 파일 경로 쌍은 한 번만 묶어 보여준다.
+    chunk_saved_estimate = 0
+    if chunk_pairs:
+        ctable = Table(title="청크(규칙) 단위 중복 (HIGH)")
+        ctable.add_column("규칙", style="dim")
+        ctable.add_column("파일 A")
+        ctable.add_column("파일 B")
+        ctable.add_column("유사도", justify="right")
+        ctable.add_column("tokens", justify="right")
+        seen_keys: set = set()
+        for p in chunk_pairs:
+            try:
+                a_rel = p.source_a.relative_to(target)
+                b_rel = p.source_b.relative_to(target)
+            except ValueError:
+                a_rel, b_rel = p.source_a, p.source_b
+            # 같은 규칙 텍스트의 중복은 한 번만 절약량 집계
+            key = (str(p.source_a), p.chunk_a_index, str(p.source_b), p.chunk_b_index)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            chunk_saved_estimate += p.token_count
+            preview = p.text_a.strip().splitlines()[0][:40] if p.text_a.strip() else ""
+            ctable.add_row(preview, str(a_rel), str(b_rel), f"{p.similarity:.2%}", str(p.token_count))
+        console.print(ctable)
+
     if level == 3:
         chunks_before, chunks_after = _merge_chunks(sources, target, threshold_eff) if not dry_run else (0, 0)
         if not dry_run and chunks_before:
@@ -199,11 +276,20 @@ def optimize_cmd(
             console.print(f"[cyan]Chunk merge[/cyan]: {chunks_before} → {chunks_after} tokens (saved {chunk_saved})")
 
     if dry_run:
-        console.print(f"\n[bold]DRY RUN[/bold] — 예상 절약: [green]{saved:,}[/green] tokens")
-        console.print(f"전: {total_before:,} → 후 예상: {total_before - saved:,}")
+        # 청크 단위 절약은 level 3 의 chunk merge 로 실현된다. dry-run 에서는
+        # 추정치를 합산해 추천(analyze)과 결과가 어긋나지 않도록 한다.
+        est_saved = saved + (chunk_saved_estimate if level == 3 else 0)
+        console.print(f"\n[bold]DRY RUN[/bold] — 예상 절약: [green]{est_saved:,}[/green] tokens")
+        console.print(f"전: {total_before:,} → 후 예상: {total_before - est_saved:,}")
+        if chunk_pairs and level < 3:
+            console.print(
+                f"[yellow]청크 단위 중복 {len(chunk_pairs)}쌍[/yellow] — "
+                "[bold]--level 3[/bold] 으로 규칙 단위 병합 가능"
+            )
         return
 
-    backup_root.mkdir(parents=True, exist_ok=True)
+    if actions:
+        backup_root.mkdir(parents=True, exist_ok=True)
     for src, canon, _tok in actions:
         try:
             _backup(src, backup_root)
@@ -211,6 +297,24 @@ def optimize_cmd(
         except OSError as e:
             console.print(f"[red]skip[/red] {src}: {e}")
 
+    # 정직성: 실제로 병합한 게 없는데(saved == 0) 청크 중복만 남아 있으면
+    # "완료 — 절약: 0 tokens" 라고 거짓 보고하지 않는다. 청크 중복은 level 3 에서
+    # 병합되므로 정확한 다음 단계를 안내한다.
+    if saved == 0 and chunk_pairs and level < 3:
+        console.print(
+            f"\n[yellow]청크(규칙) 단위 중복 {len(chunk_pairs)}쌍 발견[/yellow] — "
+            "level 1 은 완전 동일 파일만 병합합니다(절약 0)."
+        )
+        console.print(
+            "다음 단계: [bold]rune optimize --level 3 --dry-run[/bold] 으로 규칙 단위 병합 미리보기"
+        )
+        return
+
     console.print(f"\n[bold green]완료[/bold green] — 절약: {saved:,} tokens")
     console.print(f"전: {total_before:,} → 후: {total_before - saved:,}")
     console.print(f"백업: {backup_root.relative_to(target) if backup_root.is_relative_to(target) else backup_root}")
+    if chunk_pairs and level < 3:
+        console.print(
+            f"[yellow]청크 단위 중복 {len(chunk_pairs)}쌍[/yellow] — "
+            "[bold]--level 3[/bold] 으로 규칙 단위 병합 가능"
+        )
