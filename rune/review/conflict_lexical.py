@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 POSITIVE_MODALS = {"always", "must", "shall", "should"}
 NEGATIVE_MODALS = {"never", "must_not", "shall_not", "should_not", "do_not"}
@@ -93,14 +94,57 @@ def _trigger_scope(text: str) -> frozenset[str]:
     return frozenset(k.strip().lower() for k in m.group(1).split(",") if k.strip())
 
 
-def _different_scope(text_a: str, text_b: str) -> bool:
+# 파일 경로 → 파일 전체 라인 목록 캐시(1 회 읽기).
+# 스코프 상속 탐색 시 동일 파일을 반복 읽지 않도록 함수 범위 캐시를 사용한다.
+_file_lines_cache: dict[str, list[str]] = {}
+
+
+def _resolve_scope(ref: "ChunkRef") -> frozenset[str]:
+    """청크의 스코프를 결정한다.
+
+    우선순위:
+    1. 청크 자체 텍스트에 Trigger 가 있으면 그것을 사용.
+    2. 없으면(문단 분리로 Trigger 가 별도 청크가 된 경우) 같은 파일에서
+       ref.start_line 이전에 등장하는 가장 가까운 Trigger: 줄을 상속한다.
+    3. 파일 미존재 또는 읽기 실패 시 빈 집합(기존 보수성 유지).
+    """
+    # 1. 청크 자체에 Trigger 가 있으면 즉시 반환(추가 I/O 없음).
+    scope = _trigger_scope(ref.text)
+    if scope:
+        return scope
+
+    # 2. 선행 Trigger 상속 — 파일을 캐시에서 읽는다.
+    # ChunkRef.path 는 Path 또는 str 일 수 있다(타 팀 테스트가 str 로 전달).
+    # Path() 로 정규화해 .read_text() 호출이 안전하게 동작하도록 한다.
+    path_key = str(ref.path)
+    if path_key not in _file_lines_cache:
+        try:
+            _file_lines_cache[path_key] = Path(ref.path).read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            # 파일 미존재/읽기 실패: 빈 집합으로 fallback(기존 보수성 유지).
+            _file_lines_cache[path_key] = []
+
+    lines = _file_lines_cache[path_key]
+    # start_line 은 1-based; 자기 청크 이전 줄(0-based: 0 ~ start_line-2)을 역순 탐색.
+    search_end = min(ref.start_line - 1, len(lines))  # exclusive 상한(0-based)
+    for idx in range(search_end - 1, -1, -1):
+        m = _TRIGGER_RE.match(lines[idx])
+        if m:
+            kws = frozenset(k.strip().lower() for k in m.group(1).split(",") if k.strip())
+            # 빈 'Trigger:' 줄은 키워드가 없으므로 빈 집합을 반환한다
+            # (다음 줄 본문을 캡처하지 않음은 _TRIGGER_RE 가 이미 보장).
+            return kws
+    return frozenset()
+
+
+def _different_scope(ref_a: "ChunkRef", ref_b: "ChunkRef") -> bool:
     """두 청크가 명백히 다른 스코프인지(서로 다른 Trigger, 교집합 없음) 판정.
 
-    둘 다 Trigger 를 가지면서 키워드 교집합이 전혀 없으면 다른 스코프로 본다.
-    한쪽이라도 Trigger 가 없으면(스코프 미상) 보수적으로 '다르지 않다'로 판단해
-    기존 탐지를 깨지 않는다.
+    청크 내 Trigger 우선, 없으면 같은 파일의 선행 Trigger 를 상속해 스코프를 결정한다.
+    한쪽이라도 스코프를 확정할 수 없으면(빈 집합) 보수적으로 '다르지 않다'로 판단해
+    기존 탐지를 깨지 않는다. 모달 기반(0.95) 경로는 이 함수를 호출하지 않으므로 무영향.
     """
-    sa, sb = _trigger_scope(text_a), _trigger_scope(text_b)
+    sa, sb = _resolve_scope(ref_a), _resolve_scope(ref_b)
     if not sa or not sb:
         return False
     return sa.isdisjoint(sb)
@@ -137,7 +181,7 @@ def find_lexical_conflicts(refs: list[ChunkRef]) -> list[ConflictPair]:
             # 보수적 scope-awareness: 두 청크가 명백히 다른 스코프(서로 다른 Trigger,
             # 교집합 없음)면 저신뢰 휴리스틱 충돌은 오탐일 가능성이 높으므로 제외한다.
             # 모달 기반(always/never) 정탐 경로는 위에서 이미 처리되어 영향받지 않는다.
-            scope_differs = _different_scope(ref_i.text, ref_j.text)
+            scope_differs = _different_scope(ref_i, ref_j)
             for v1, o1 in vobj_i:
                 for v2, o2 in vobj_j:
                     if v1 == v2 and _opposing_objects(o1, o2):

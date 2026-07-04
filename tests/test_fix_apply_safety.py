@@ -5,6 +5,7 @@
 자동 삭제되면 안 된다. 모달 기반 0.95 충돌은 기존대로 삭제되어야 한다.
 """
 import json
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -16,7 +17,9 @@ runner = CliRunner()
 
 
 def _ref(path: str, text: str, start: int = 1) -> ChunkRef:
-    return ChunkRef(path=path, start_line=start, end_line=start, sha256="x", text=text)
+    # conflict_lexical._resolve_scope 가 ref.path.read_text() 를 호출하므로
+    # Path 객체로 변환한다. 파일이 없으면 read_text 실패 시 빈 스코프로 처리된다.
+    return ChunkRef(path=Path(path), start_line=start, end_line=start, sha256="x", text=text)
 
 
 def _write_rule(root, name: str, body: str):
