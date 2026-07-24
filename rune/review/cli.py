@@ -118,11 +118,15 @@ def _load_report_from_json(report_path: Path) -> ReviewReport:
             end_line=c["b"]["end_line"],
             sha256=c["b"]["sha256"],
         )
+        # b_lines: 구버전 리포트엔 없으므로 없으면 None(additive 스키마).
+        raw_bl = c.get("b_lines")
+        b_lines = tuple(raw_bl) if raw_bl and len(raw_bl) == 2 else None
         conflicts.append(ConflictPair(
             a=a, b=b,
             reason=c.get("reason", ""),
             confidence=float(c.get("confidence", 0.0)),
             source=c.get("source", ""),
+            b_lines=b_lines,
         ))
 
     dead: list[DeadCandidate] = []
@@ -155,12 +159,15 @@ def _load_report_from_json(report_path: Path) -> ReviewReport:
 def _build_apply_ops(conflicts: list, dead: list) -> tuple:
     """충돌/데드 후보로부터 apply op 목록과 제외 통계를 반환.
 
-    반환: (ops, low_confidence_skipped, protected_skipped, static_dead_skipped)
+    반환: (ops, low_confidence_skipped, protected_skipped, static_dead_skipped,
+           line_precision_applied)
 
     적용 규칙 (우선순위 순):
     1. confidence < APPLY_CONFLICT_CONFIDENCE_THRESHOLD 충돌 → low_confidence_skipped.
     2. loser(c.b) 청크가 protected 집합(저신뢰 loser 와 동일 청크) → protected_skipped.
-    3. loser(c.b) 청크가 혼합 청크(_is_mixed_chunk) → protected_skipped.
+    3. loser(c.b) 청크가 혼합 청크(_is_mixed_chunk):
+       - b_lines 있음 → Operation(kind="delete_lines") 생성 (라인 정밀 삭제).
+       - b_lines 없음 → 기존 보수적 제외(protected_skipped).
     4. dead stage=="static" → static_dead_skipped (오탐 빈도가 높아 자동 삭제 금지).
     5. dead stage=="events" (사용 이벤트 확증) → delete op 허용.
     """
@@ -172,6 +179,7 @@ def _build_apply_ops(conflicts: list, dead: list) -> tuple:
     ops: list = []
     low_confidence_skipped = 0
     protected_skipped = 0
+    line_precision_applied = 0  # 혼합 청크에 라인 정밀 삭제가 적용된 건수
 
     for c in conflicts:
         if c.confidence < APPLY_CONFLICT_CONFIDENCE_THRESHOLD:
@@ -192,8 +200,15 @@ def _build_apply_ops(conflicts: list, dead: list) -> tuple:
             protected_skipped += 1
             continue
         if _is_mixed_chunk(chunk_text):
-            # 혼합 청크: 통째 삭제 시 관련 없는 규칙까지 소실될 수 있어 제외.
-            protected_skipped += 1
+            # 혼합 청크: 통째 삭제 시 관련 없는 규칙까지 소실된다.
+            # b_lines(충돌 유발 라인)가 있으면 라인 정밀 삭제로 근본 해결.
+            # b_lines 없으면(구버전 리포트 등) 기존 보수적 제외 유지.
+            b_lines = getattr(c, "b_lines", None)
+            if b_lines is not None:
+                ops.append(Operation(kind="delete_lines", ref=c.b, line_range=b_lines))
+                line_precision_applied += 1
+            else:
+                protected_skipped += 1
             continue
         ops.append(Operation(kind="delete", ref=c.b))
 
@@ -219,7 +234,115 @@ def _build_apply_ops(conflicts: list, dead: list) -> tuple:
             continue
         ops.append(Operation(kind="delete", ref=d.chunk))
 
-    return ops, low_confidence_skipped, protected_skipped, static_dead_skipped
+    return ops, low_confidence_skipped, protected_skipped, static_dead_skipped, line_precision_applied
+
+
+def _build_select_ops(
+    conflicts: list,
+    dead: list,
+    select_ids: frozenset,
+) -> tuple:
+    """--select 경로 전용 op 구성. confidence 게이트를 면제하고 id 집합으로 필터링.
+
+    반환: (ops, protected_skipped, line_precision_applied, unknown_ids)
+      - ops: 실행 대상 Operation 목록.
+      - protected_skipped: 혼합 청크 + b_lines 없는 경우처럼 안전상 제외된 건수.
+      - line_precision_applied: 혼합 청크에 라인 정밀 삭제가 적용된 건수.
+      - unknown_ids: select_ids 에 있지만 실제 finding 에서 발견되지 않은 id 집합.
+
+    안전 원칙:
+    - 명시 선택 → confidence 게이트 면제(사용자가 리포트 검토 후 선택했으므로).
+    - 저신뢰 loser 동일 청크 동반삭제 방지: protected_keys 검사를 적용한다.
+      단, b_lines 가 있는 경우(라인 정밀 삭제)는 허용한다 —
+      청크 전체가 아닌 특정 라인만 제거하므로 동반삭제 위험이 없다.
+    - 혼합 청크: b_lines 있으면 라인 정밀 삭제, 없으면 제외 + 안내.
+    - applier sha 스테일 검증은 불변(Operation 레벨에서 applier 가 보장).
+    """
+    from rune.review.applier import Operation
+
+    # 저신뢰 loser 청크 키 집합 — 청크 전체 삭제(delete) 동반삭제 차단용.
+    # b_lines(라인 정밀 삭제)는 이 검사를 통과시킨다.
+    protected_keys = _build_protected_keys(conflicts)
+
+    ops: list = []
+    protected_skipped = 0
+    line_precision_applied = 0
+    matched_ids: set[str] = set()
+
+    for c in conflicts:
+        if c.id not in select_ids:
+            continue
+        matched_ids.add(c.id)
+        # 혼합 청크 검사: text 가 비어 있으면 디스크에서 읽는다.
+        chunk_text = c.b.text if c.b.text else _resolve_chunk_text(c.b)
+        if chunk_text is None:
+            # 확인 불가한 청크는 지우지 않는다(안전 원칙).
+            protected_skipped += 1
+            print(
+                f"[select] {c.id}: 청크 본문 해석 불가 — 제외됨.",
+                file=sys.stderr,
+            )
+            continue
+        if _is_mixed_chunk(chunk_text):
+            b_lines = getattr(c, "b_lines", None)
+            if b_lines is not None:
+                # 라인 정밀 삭제: 청크 전체가 아닌 특정 라인만 제거하므로
+                # protected_keys 검사(동반삭제 방지)를 적용하지 않는다.
+                ops.append(Operation(kind="delete_lines", ref=c.b, line_range=b_lines))
+                line_precision_applied += 1
+            else:
+                protected_skipped += 1
+                print(
+                    f"[select] {c.id}: 혼합 청크 + b_lines 없음 — 라인 정밀 삭제 불가, 제외됨.",
+                    file=sys.stderr,
+                )
+            continue
+        # 청크 전체 삭제(delete) 경로: 저신뢰 loser 동반삭제 방지 검사 적용.
+        # 단, 선택된 finding 자신이 그 저신뢰 충돌의 당사자인 경우는 허용한다
+        # (사용자가 리포트를 검토 후 명시 선택했으므로 confidence 게이트 면제).
+        # protected_keys 는 "선택되지 않은 다른 저신뢰 finding 의 loser 청크"를 보호하므로,
+        # 해당 finding 이 select_ids 에 포함된 경우는 동반삭제가 아니라 명시 삭제다.
+        key = _chunk_key(c.b)
+        if key in protected_keys:
+            # 이 청크를 loser 로 가지는 저신뢰 충돌 중 하나라도 select_ids 에 있으면 허용.
+            loser_selected = any(
+                _chunk_key(other.b) == key and other.id in select_ids
+                for other in conflicts
+                if other.confidence < APPLY_CONFLICT_CONFIDENCE_THRESHOLD
+            )
+            if not loser_selected:
+                protected_skipped += 1
+                print(
+                    f"[select] {c.id}: 저신뢰 충돌의 loser 와 동일 청크 — "
+                    f"통째 삭제 차단됨(동반삭제 방지).",
+                    file=sys.stderr,
+                )
+                continue
+        ops.append(Operation(kind="delete", ref=c.b))
+
+    for d in dead:
+        if d.id not in select_ids:
+            continue
+        matched_ids.add(d.id)
+        dead_text = d.chunk.text if d.chunk.text else _resolve_chunk_text(d.chunk)
+        if dead_text is None:
+            protected_skipped += 1
+            print(
+                f"[select] {d.id}: 청크 본문 해석 불가 — 제외됨.",
+                file=sys.stderr,
+            )
+            continue
+        if _is_mixed_chunk(dead_text):
+            protected_skipped += 1
+            print(
+                f"[select] {d.id}: 혼합 청크 — 제외됨.",
+                file=sys.stderr,
+            )
+            continue
+        ops.append(Operation(kind="delete", ref=d.chunk))
+
+    unknown_ids = select_ids - matched_ids
+    return ops, protected_skipped, line_precision_applied, unknown_ids
 
 
 @review_app.callback(invoke_without_command=True)
@@ -238,22 +361,21 @@ def main(
     no_prune: bool = typer.Option(False, "--no-prune"),
     confirm_delete_heuristics: bool = typer.Option(False, "--confirm-delete-heuristics", help="Acknowledge headless heuristic deletion; required for --apply --yes without --from-report."),
     from_report: Path = typer.Option(None, "--from-report", help="Load ops from a saved JSON report (produced by rune review --json). Live scan is skipped entirely; ops are built solely from the report's conflicts/dead_candidates."),
-    select: str = typer.Option(None, "--select", help="(v0.3 예정) Comma-separated finding IDs to apply selectively. Not yet implemented — exits with error code 2."),
+    select: str = typer.Option(None, "--select", help="Comma-separated finding IDs (c-XXXXXXXX or d-XXXXXXXX) to apply selectively. Use with --json output IDs. Confidence gate is waived for explicitly selected items; only line-precise or whole-chunk single-rule deletions are performed."),
     probe_startup_time: bool = typer.Option(False, "--probe-startup-time", hidden=True),
 ):
     import os
     backup_root = path / ".rune" / "backups"
 
-    # (3) --select: 아직 구현되지 않음. 정직하게 거부하고 exit 2.
-    # 과거 help 문구("currently equivalent to --confirm-delete-heuristics")는 거짓이었다.
-    # 실제 동작은 전량 삭제로서 "선택적 적용"이 아니었으므로, 구현 전까지 차단한다.
+    # (3) --select: 선택 id 파싱. 값이 주어지면 집합으로 보관해 이후 필터링에 사용.
+    # unknown id 는 ops 구성 후 검증한다.
+    select_ids: "frozenset[str] | None" = None
     if select is not None:
-        print(
-            "error: --select 는 아직 구현되지 않았습니다 (v0.3 예정).\n"
-            "선택적 적용이 필요하면 --from-report 로 리포트를 생성 후 수동 편집하세요.",
-            file=sys.stderr,
-        )
-        raise typer.Exit(2)
+        parsed = frozenset(s.strip() for s in select.split(",") if s.strip())
+        if not parsed:
+            print("error: --select 에 유효한 id 가 없습니다.", file=sys.stderr)
+            raise typer.Exit(2)
+        select_ids = parsed
 
     # I6: --apply and --restore are mutually exclusive
     if apply and restore:
@@ -327,7 +449,7 @@ def main(
             # 라이브 스캔 경로
             refs_with_triggers = load_chunk_refs(path)
             refs = [r for r, _ in refs_with_triggers]
-            apply_conflicts = find_lexical_conflicts(refs)
+            apply_conflicts = find_lexical_conflicts(refs, repo_root=path)
             apply_dead = find_dead_rules_static(refs, repo_root=path)
 
             if events_path is not None:
@@ -351,30 +473,59 @@ def main(
                 )
                 apply_conflicts = apply_conflicts + nli_pairs
 
-        # (1)(4) 통합 게이트: 저신뢰·혼합·동반삭제·정적데드 필터 적용
-        ops, low_confidence_skipped, protected_skipped, static_dead_skipped = (
-            _build_apply_ops(apply_conflicts, apply_dead)
-        )
+        if select_ids is not None:
+            # --select 경로: confidence 게이트 면제, 지정 id 만 처리.
+            ops, protected_skipped, line_precision_applied, unknown_ids = (
+                _build_select_ops(apply_conflicts, apply_dead, select_ids)
+            )
+            # unknown id 가 있으면 즉시 종료(exit 2).
+            if unknown_ids:
+                for uid in sorted(unknown_ids):
+                    print(f"error: unknown id '{uid}'", file=sys.stderr)
+                raise typer.Exit(2)
+            if protected_skipped:
+                print(
+                    f"보호/혼합 청크 {protected_skipped}건은 안전상 자동 삭제에서 제외됨 "
+                    f"(report-only).",
+                    file=sys.stderr,
+                )
+            if line_precision_applied:
+                print(
+                    f"혼합 청크 {line_precision_applied}건은 라인 정밀 삭제 적용 "
+                    f"(충돌 유발 라인만 제거, 무관 규칙 보존).",
+                    file=sys.stderr,
+                )
+        else:
+            # (1)(4) 통합 게이트: 저신뢰·혼합·동반삭제·정적데드 필터 적용
+            ops, low_confidence_skipped, protected_skipped, static_dead_skipped, line_precision_applied = (
+                _build_apply_ops(apply_conflicts, apply_dead)
+            )
 
-        # 제외 사유별 안내 — 안내 건수와 실제 미삭제 건수가 일치해야 한다.
-        if low_confidence_skipped:
-            print(
-                f"저신뢰 충돌 {low_confidence_skipped}건은 안전상 자동 삭제에서 제외됨 "
-                f"(confidence < {APPLY_CONFLICT_CONFIDENCE_THRESHOLD}; report-only).",
-                file=sys.stderr,
-            )
-        if protected_skipped:
-            print(
-                f"보호/혼합 청크 {protected_skipped}건은 안전상 자동 삭제에서 제외됨 "
-                f"(report-only).",
-                file=sys.stderr,
-            )
-        if static_dead_skipped:
-            print(
-                f"정적 휴리스틱 데드 {static_dead_skipped}건은 report-only "
-                f"(사용 이벤트 확증(stage=events) 데드만 자동 삭제됨).",
-                file=sys.stderr,
-            )
+            # 제외/적용 사유별 안내 — 안내 건수와 실제 처리 건수가 일치해야 한다.
+            if low_confidence_skipped:
+                print(
+                    f"저신뢰 충돌 {low_confidence_skipped}건은 안전상 자동 삭제에서 제외됨 "
+                    f"(confidence < {APPLY_CONFLICT_CONFIDENCE_THRESHOLD}; report-only).",
+                    file=sys.stderr,
+                )
+            if protected_skipped:
+                print(
+                    f"보호/혼합 청크 {protected_skipped}건은 안전상 자동 삭제에서 제외됨 "
+                    f"(report-only).",
+                    file=sys.stderr,
+                )
+            if line_precision_applied:
+                print(
+                    f"혼합 청크 {line_precision_applied}건은 라인 정밀 삭제 적용 "
+                    f"(충돌 유발 라인만 제거, 무관 규칙 보존).",
+                    file=sys.stderr,
+                )
+            if static_dead_skipped:
+                print(
+                    f"정적 휴리스틱 데드 {static_dead_skipped}건은 report-only "
+                    f"(사용 이벤트 확증(stage=events) 데드만 자동 삭제됨).",
+                    file=sys.stderr,
+                )
 
         from rune.review.applier import apply_operations, prune_backups
         backup_root.mkdir(parents=True, exist_ok=True)
@@ -390,9 +541,25 @@ def main(
         return
 
     # --apply 없는 경우: 라이브 스캔 후 리포트/TUI 출력
+    # --select 가 지정되어 있지만 --apply 가 없으면 스캔 결과를 필터링 출력 후 exit 0.
+    # (TUI를 실행하면 무한 대기가 발생하므로 --json 경로와 동일하게 처리한다.)
+    if select_ids is not None:
+        refs_with_triggers = load_chunk_refs(path)
+        refs = [r for r, _ in refs_with_triggers]
+        conflicts_scan = find_lexical_conflicts(refs, repo_root=path)
+        dead_scan = find_dead_rules_static(refs, repo_root=path)
+        report = ReviewReport(
+            schema_version="1.0",
+            detector_tier="L1",
+            conflicts=[c for c in conflicts_scan if c.id in select_ids],
+            dead_candidates=[d for d in dead_scan if d.id in select_ids],
+        )
+        print(jsonlib.dumps(report.to_dict(), indent=2))
+        return
+
     refs_with_triggers = load_chunk_refs(path)
     refs = [r for r, _ in refs_with_triggers]
-    conflicts = find_lexical_conflicts(refs)
+    conflicts = find_lexical_conflicts(refs, repo_root=path)
     dead = find_dead_rules_static(refs, repo_root=path)
 
     if events_path is not None:
