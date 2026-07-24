@@ -6,7 +6,7 @@ from rich.table import Table
 
 from rune.pipeline.inventory import run_inventory
 from rune.pipeline.scorer import score_chunks_structural, score_chunks_tfidf
-from rune.pipeline.dedup import find_dedup_pairs, find_dedup_chunk_pairs
+from rune.pipeline.dedup import find_dedup_pairs, find_dedup_chunk_pairs, find_dedup_rule_pairs
 from rune.pipeline.trigger import extract_triggers
 from rune.cli.optimize import has_optimization_targets, recommended_optimize_command
 from rune.models.report import AnalysisReport
@@ -40,8 +40,10 @@ def analyze_cmd(
     # Dedup — 파일단위 비교는 유지하되, 청크(규칙) 단위 비교를 주(主) 신호로 쓴다.
     pairs = [] if no_semantic else find_dedup_pairs(sources)
     chunk_pairs = [] if no_semantic else find_dedup_chunk_pairs(sources)
+    rule_pairs = [] if no_semantic else find_dedup_rule_pairs(sources)
     high_pairs = [p for p in pairs if p.confidence == "HIGH"]
     high_chunk_pairs = [p for p in chunk_pairs if p.confidence == "HIGH"]
+    high_rule_pairs = [p for p in rule_pairs if p.confidence == "HIGH"]
 
     # Trigger
     trigger_results = extract_triggers(sources)
@@ -50,9 +52,14 @@ def analyze_cmd(
     level = _determine_level(sources)
 
     # optimize 가 실제로 처리할 대상이 있을 때만 추천한다(추천-결과 정합).
-    recommend_optimize = has_optimization_targets(sources)
+    # 규칙 단위 중복(rule_pairs) 은 optimize --level 3 이 처리한다.
+    # has_optimization_targets 는 chunk_pairs 기반이므로 rule_pairs 는 별도 신호.
+    recommend_optimize = has_optimization_targets(sources) or bool(high_rule_pairs)
     # 신호 종류에 맞춰 실제 절약을 내는 정확한 명령을 안내한다.
     optimize_command = recommended_optimize_command(sources)
+    # 규칙 단위 중복만 있고 청크 단위 중복이 없으면 level 3 을 직접 안내
+    if not optimize_command and high_rule_pairs:
+        optimize_command = "rune optimize --level 3 --dry-run"
 
     report = AnalysisReport(
         total_tokens=total_tokens,
@@ -64,12 +71,14 @@ def analyze_cmd(
 
     if output_json:
         typer.echo(json.dumps({
+            "schema_version": "1.1",
             "total_tokens": report.total_tokens,
             "level": report.level,
             "platform": platform.value,
             "source_count": len(sources),
             "dedup_high": len(high_pairs),
             "dedup_chunk_high": len(high_chunk_pairs),
+            "dedup_rule_high": len(high_rule_pairs),
             "recommend_optimize": recommend_optimize,
             "optimize_command": optimize_command,
             "sources": [
@@ -79,7 +88,7 @@ def analyze_cmd(
         }))
         return
 
-    _render_report(report, platform.value, target, high_chunk_pairs, recommend_optimize, optimize_command)
+    _render_report(report, platform.value, target, high_chunk_pairs, high_rule_pairs, recommend_optimize, optimize_command)
 
 
 def _determine_level(sources) -> int:
@@ -99,10 +108,12 @@ def _render_report(
     platform: str,
     target: Path,
     high_chunk_pairs: list | None = None,
+    high_rule_pairs: list | None = None,
     recommend_optimize: bool = False,
     optimize_command: str | None = None,
 ) -> None:
     high_chunk_pairs = high_chunk_pairs or []
+    high_rule_pairs = high_rule_pairs or []
     console.print(f"\n[bold]rune analyze[/bold] — {target}")
     console.print(f"Platform: [cyan]{platform}[/cyan]\n")
 
@@ -134,10 +145,10 @@ def _render_report(
         if len(high_pairs) > 10:
             console.print(f"  ... 외 {len(high_pairs) - 10}쌍")
 
-    # 청크(규칙) 단위 중복 — 파일이 통째로 같지 않아도 같은 규칙이 여러 곳에
+    # 청크(문단) 단위 중복 — 파일이 통째로 같지 않아도 같은 문단이 여러 곳에
     # 들어있으면 여기서 보고한다(주 신호).
     if high_chunk_pairs:
-        console.print(f"[red]규칙 단위 중복[/red]: {len(high_chunk_pairs)}쌍 (HIGH confidence)")
+        console.print(f"[red]문단 단위 중복[/red]: {len(high_chunk_pairs)}쌍 (HIGH confidence)")
         for p in high_chunk_pairs[:10]:
             try:
                 a = p.source_a.relative_to(target)
@@ -148,6 +159,21 @@ def _render_report(
             console.print(f"  - \"{preview}\": {a} ↔ {b} ({p.similarity:.2%})")
         if len(high_chunk_pairs) > 10:
             console.print(f"  ... 외 {len(high_chunk_pairs) - 10}쌍")
+
+    # 서브청크(규칙 라인) 단위 중복 — 문단이 달라도 동일 규칙이 여러 파일에
+    # 섞여 있으면 여기서 보고한다(서브청크 신호).
+    if high_rule_pairs:
+        console.print(f"[red]규칙 단위 중복[/red]: {len(high_rule_pairs)}쌍 (HIGH confidence)")
+        for p in high_rule_pairs[:10]:
+            try:
+                a = p.source_a.relative_to(target)
+                b = p.source_b.relative_to(target)
+            except ValueError:
+                a, b = p.source_a, p.source_b
+            preview = p.text.strip()[:48] if p.text.strip() else ""
+            console.print(f"  - \"{preview}\": {a}:{p.line_a} ↔ {b}:{p.line_b} ({p.similarity:.2%})")
+        if len(high_rule_pairs) > 10:
+            console.print(f"  ... 외 {len(high_rule_pairs) - 10}쌍")
 
     # 추천은 optimize 가 실제로 처리할 대상이 있을 때만(추천-결과 정합).
     # 신호 종류에 맞춰 실제 절약을 내는 정확한 명령을 안내한다.
