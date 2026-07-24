@@ -1,0 +1,21 @@
+# Rune 번들 패치 매니페스트
+#
+# 'rune patch verify' / 'rune patch apply' 가 --manifest 미지정 시 이 파일을
+# 기본 매니페스트로 사용한다. 엔트리가 없으면 "no patches" 메시지를 출력하고 exit 0 으로 종료한다.
+#
+# 각 패치 엔트리는 아래 필드를 모두 포함해야 한다:
+#   target_path     수정 대상 파일 경로 (상대 경로는 이 매니페스트 위치 기준)
+#   pre_sha256      적용 전 대상 파일의 sha256 (신규 파일이면 빈 문자열 "")
+#   post_sha256     적용 후 대상 파일의 sha256
+#   payload_path    적용할 페이로드 파일 경로 (상대 경로는 이 매니페스트 위치 기준)
+#   description     패치 설명
+#   applied_at_iso  패치 적용 시각 (ISO-8601, 예: "2026-07-04T00:00:00+09:00")
+#
+# 예시:
+# [[patch]]
+# target_path    = "rune/example.py"
+# pre_sha256     = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+# post_sha256    = "abc123..."
+# payload_path   = "payloads/example.py"
+# description    = "예시 패치"
+# applied_at_iso = "2026-07-04T00:00:00+09:00"

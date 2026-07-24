@@ -46,7 +46,8 @@ applied_at_iso = ""
         capture_output=True, text=True,
     )
     assert result.returncode == 0
-    assert "APPLIED" in result.stdout
+    # verify_cmd は APPLIED を "OK" として報告する (patch.py の仕様変更)
+    assert "OK" in result.stdout
 
 
 def test_patch_apply_writes_payload(tmp_path):

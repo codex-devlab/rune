@@ -29,5 +29,9 @@ rune = "rune.cli.main:app"
 [tool.setuptools.packages.find]
 include = ["rune*"]
 
+[tool.setuptools.package-data]
+# manifest.toml 을 패키지 데이터로 포함시켜 pip install 후에도 번들 매니페스트가 배포된다.
+"rune.patches" = ["*.toml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

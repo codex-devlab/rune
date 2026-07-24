@@ -2,7 +2,9 @@ import re
 from pathlib import Path
 from rune.review.types import ChunkRef, DeadCandidate
 
-TRIGGER_RE = re.compile(r"(?i)^trigger:\s*(.+)$", re.MULTILINE)
+# 콜론 앞뒤는 수평 공백만 허용한다. \s* 는 개행을 삼켜 빈 'Trigger:' 줄에서
+# 다음 본문 줄을 trigger 키워드로 오인 캡처한다(conflict_lexical 와 동일 수정).
+TRIGGER_RE = re.compile(r"(?im)^[^\S\n]*trigger:[^\S\n]*(.+)$")
 
 LANG_TO_EXT = {
     "golang": [".go"], "go": [".go"],
