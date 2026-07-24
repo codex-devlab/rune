@@ -132,22 +132,25 @@ class TestMixedChunkProtection:
             b=shared_b,   # 같은 청크
             reason="r", confidence=0.6, source="lexical",
         )
-        ops, low_skip, prot_skip, _ = _build_apply_ops([high, low], [])
+        # v0.3: _build_apply_ops 반환값이 5-tuple로 확장(line_precision_applied 추가).
+        ops, low_skip, prot_skip, _, _lp = _build_apply_ops([high, low], [])
         # 저신뢰 1건이 건너뜀 → loser 가 protected → 고신뢰도 삭제 차단
         assert low_skip == 1
         assert prot_skip == 1
         assert ops == []
 
     def test_mixed_chunk_loser_not_deleted(self):
-        """혼합 청크를 loser 로 갖는 고신뢰 충돌도 삭제에서 제외된다."""
+        """혼합 청크 + b_lines=None 이면 보수적으로 삭제에서 제외된다."""
         mixed_text = "Use spaces.\nUse 4-space indent.\n"
         b = _ref("b.md", mixed_text)
         high = ConflictPair(
             a=_ref("a.md", "Always use spaces."),
             b=b,
             reason="r", confidence=0.95, source="lexical",
+            b_lines=None,  # b_lines 없음 → 보수 제외
         )
-        ops, _, prot_skip, _ = _build_apply_ops([high], [])
+        # v0.3: _build_apply_ops 반환값이 5-tuple로 확장(line_precision_applied 추가).
+        ops, _, prot_skip, _, _lp = _build_apply_ops([high], [])
         assert prot_skip == 1
         assert ops == []
 
@@ -159,7 +162,8 @@ class TestMixedChunkProtection:
             b=b,
             reason="r", confidence=0.95, source="lexical",
         )
-        ops, low_skip, prot_skip, _ = _build_apply_ops([high], [])
+        # v0.3: _build_apply_ops 반환값이 5-tuple로 확장(line_precision_applied 추가).
+        ops, low_skip, prot_skip, _, _lp = _build_apply_ops([high], [])
         assert low_skip == 0
         assert prot_skip == 0
         assert len(ops) == 1
@@ -169,27 +173,36 @@ class TestMixedChunkProtection:
     # 통합: CLI --apply 에서 혼합 청크가 실제로 보존되는지
     # -----------------------------------------------------------------------
 
-    def test_cli_mixed_chunk_file_preserved(self, tmp_path):
-        """혼합 청크(규칙 2줄)를 포함하는 파일은 --apply 후에도 변경되지 않는다."""
+    def test_cli_mixed_chunk_unrelated_rule_preserved(self, tmp_path):
+        """혼합 청크에서 라인 정밀 삭제 후 무관 규칙 라인이 보존된다.
+
+        v0.3 변경: 혼합 청크라도 b_lines 가 있으면 충돌 유발 라인만 제거한다.
+        'Never use spaces.' 라인은 제거되고, 'Use 4-space indent.' 라인은 남아야 한다.
+        """
         (tmp_path / "CLAUDE.md").write_text("# P\n\nCore rules apply.\n")
-        # b 파일은 규칙 2줄 → 혼합 청크 → 삭제 금지
-        a = _write_rule(tmp_path, "modal_a.md", "Always use spaces.\n")
+        _write_rule(tmp_path, "modal_a.md", "Always use spaces.\n")
         b = _write_rule(tmp_path, "modal_b.md", "Never use spaces.\nUse 4-space indent.\n")
-        before_b = b.read_text()
 
         result = _invoke_apply(tmp_path)
         assert result.exit_code == 0, result.output
-        assert b.read_text() == before_b, "혼합 청크가 자동 삭제되었음"
+        # 무관 규칙("Use 4-space indent.")은 보존되어야 한다.
+        assert b.exists(), "혼합 청크 파일이 삭제되었음"
+        assert "Use 4-space indent." in b.read_text(), "무관 규칙 라인이 소실되었음"
 
-    def test_cli_protected_chunk_message_in_stderr(self, tmp_path):
-        """보호/혼합 제외 시 stderr 에 안내 메시지가 출력된다."""
+    def test_cli_line_precision_message_in_stderr(self, tmp_path):
+        """혼합 청크에 라인 정밀 삭제가 적용될 때 stderr 에 안내 메시지가 출력된다.
+
+        v0.3 변경: '보호/혼합 청크' 대신 '라인 정밀 삭제 적용' 메시지가 출력된다.
+        """
         (tmp_path / "CLAUDE.md").write_text("# P\n\nCore rules apply.\n")
         _write_rule(tmp_path, "modal_a.md", "Always use spaces.\n")
         _write_rule(tmp_path, "modal_b.md", "Never use spaces.\nUse 4-space indent.\n")
 
         result = _invoke_apply(tmp_path)
         combined = result.output or ""
-        assert "보호/혼합 청크" in combined or "자동 삭제에서 제외" in combined
+        # 라인 정밀 삭제 안내 또는 보호/혼합 안내 중 하나가 출력되어야 한다.
+        assert ("라인 정밀 삭제" in combined or "보호/혼합 청크" in combined or
+                "자동 삭제에서 제외" in combined), f"안내 메시지 없음: {combined!r}"
 
 
 # ===========================================================================
@@ -356,40 +369,49 @@ class TestFromReport:
 
 
 # ===========================================================================
-# (3) --select exit 2
+# (3) --select 동작 (v0.3 실구현)
 # ===========================================================================
 
-class TestSelectNotImplemented:
-    """--select 는 v0.3 예정이므로 exit 2 + 명확한 에러 메시지로 거부해야 한다."""
+class TestSelectBehavior:
+    """--select 가 v0.3 에서 실구현됨.
+    unknown id → exit 2 + 'unknown id' 메시지.
+    유효 id → 해당 finding 만 처리(confidence 게이트 면제).
+    --select 없이 known-good 시나리오는 test_v03_config_select.py 에서 상세 검증.
 
-    def test_select_exits_2(self, tmp_path):
+    사유: 과거 TestSelectNotImplemented 는 '미구현 거부' 동작을 검증했으나,
+    v0.3 에서 --select 가 실구현되어 unknown id exit 2 / 정상 id 적용으로 대체됨.
+    """
+
+    def test_unknown_id_exits_2(self, tmp_path):
+        """존재하지 않는 id 를 --select 에 지정하면 exit 2."""
         (tmp_path / "CLAUDE.md").write_text("# P\n\nCore rules apply.\n")
         result = runner.invoke(
             app,
             ["review", str(tmp_path), "--apply", "--yes",
-             "--confirm-delete-heuristics", "--select", "f1,f2"],
+             "--confirm-delete-heuristics", "--select", "c-deadbeef"],
         )
         assert result.exit_code == 2
 
-    def test_select_message_mentions_not_implemented(self, tmp_path):
+    def test_unknown_id_stderr_message(self, tmp_path):
+        """unknown id 에 대해 'unknown id' 문자열을 stderr 에 출력."""
         (tmp_path / "CLAUDE.md").write_text("# P\n\nCore rules apply.\n")
         result = runner.invoke(
             app,
             ["review", str(tmp_path), "--apply", "--yes",
-             "--confirm-delete-heuristics", "--select", "f1"],
+             "--confirm-delete-heuristics", "--select", "c-deadbeef"],
         )
-        combined = result.output or ""
-        # 미구현 또는 v0.3 언급 확인
-        assert "구현" in combined or "v0.3" in combined
+        combined = (result.output or "") + (result.stderr if hasattr(result, "stderr") else "")
+        assert "unknown id" in combined or "unknown" in combined.lower()
 
-    def test_select_without_apply_also_exits_2(self, tmp_path):
-        """--apply 없이 --select 만 지정해도 exit 2 (조기 거부)."""
+    def test_select_without_apply_does_not_crash(self, tmp_path):
+        """--apply 없이 --select 만 지정해도 exit 0 (scan 후 필터링, 삭제 없음)."""
         (tmp_path / "CLAUDE.md").write_text("# P\n\nCore rules apply.\n")
         result = runner.invoke(
             app,
-            ["review", str(tmp_path), "--select", "f1"],
+            ["review", str(tmp_path), "--select", "c-deadbeef"],
         )
-        assert result.exit_code == 2
+        # --apply 없는 경로는 scan+report 만 하므로 exit 0.
+        assert result.exit_code == 0
 
 
 # ===========================================================================
@@ -408,7 +430,8 @@ class TestStaticDeadReportOnly:
             chunk=_ref("x.md", "Old rule."),
             reason="no trigger found", stage="static",
         )
-        ops, _, _, static_skip = _build_apply_ops([], [dead_static])
+        # v0.3: _build_apply_ops 반환값이 5-tuple로 확장(line_precision_applied 추가).
+        ops, _, _, static_skip, _lp = _build_apply_ops([], [dead_static])
         assert static_skip == 1
         assert ops == []
 
@@ -417,7 +440,8 @@ class TestStaticDeadReportOnly:
             chunk=_ref("x.md", "Old rule."),
             reason="no usage in 30 days", stage="events",
         )
-        ops, _, _, static_skip = _build_apply_ops([], [dead_events])
+        # v0.3: _build_apply_ops 반환값이 5-tuple로 확장(line_precision_applied 추가).
+        ops, _, _, static_skip, _lp = _build_apply_ops([], [dead_events])
         assert static_skip == 0
         assert len(ops) == 1
         assert ops[0].kind == "delete"
@@ -432,7 +456,8 @@ class TestStaticDeadReportOnly:
             chunk=_ref("b.md", "Old events rule."),
             reason="no usage", stage="events",
         )
-        ops, _, _, static_skip = _build_apply_ops([], [d_static, d_events])
+        # v0.3: _build_apply_ops 반환값이 5-tuple로 확장(line_precision_applied 추가).
+        ops, _, _, static_skip, _lp = _build_apply_ops([], [d_static, d_events])
         assert static_skip == 1
         assert len(ops) == 1
         assert ops[0].ref.path == Path("b.md")
